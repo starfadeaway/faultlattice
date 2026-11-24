@@ -1,0 +1,3 @@
+# canonical JSON 与报告文件要求 LF 行尾（spec 第 7 节）；
+# 统一全仓库文本文件以 LF 存储与检出，避免 Windows 上 CRLF 破坏 verify 复算。
+* text=auto eol=lf

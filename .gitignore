@@ -1,0 +1,24 @@
+# 运行产物默认忽略，但保留公开样例
+runs/*
+!runs/_sample/
+!runs/_sample/**
+
+# 本地凭据
+.env
+
+# Python / 工具链
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pyright/
+htmlcov/
+.coverage
+coverage.xml
+
+# 编辑器与系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

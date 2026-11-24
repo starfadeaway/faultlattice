@@ -1,0 +1,7 @@
+# 第一版规则集固定为 E / F / I / UP / B，line-length = 110。
+# 后续调整 lint 规则必须作为显式变更记录（提交信息中说明原因）。
+line-length = 110
+target-version = "py313"
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]

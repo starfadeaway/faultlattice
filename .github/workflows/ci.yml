@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # canonical JSON / 换行 / 路径行为必须在双平台同时验证（spec 第 7 节）
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      # pyright 的 PyPI 包装器通过 nodeenv 自动准备 node 运行时，
+      # 这里显式装 node 保证 CI 行为可复现
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 同步依赖（uv.lock 为唯一事实来源）
+        run: uv sync --locked
+
+      - name: pytest（含 golden / meta / architecture / e2e）
+        run: uv run pytest
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Pyright
+        run: uv run pyright
+
+      - name: AST 依赖方向检查
+        run: uv run pytest tests/architecture/test_imports.py
+
+      - name: 仓库卫生检查
+        run: uv run python scripts/check_repo_hygiene.py

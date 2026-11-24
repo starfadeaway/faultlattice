@@ -1,0 +1,59 @@
+# 示例预注册文件：本地受控写文件任务（阶段 1 示例，阶段 2 直接引用）。
+#
+# 本文件的全部预期都在看到实验结果前声明（spec 第 4.1 节）。
+# M0–M2 本地框架实验：target_layers 只含 framework；评价真实模型
+# 反应的 M3 实验才允许加入 model。
+task_id: local_write
+description: >-
+  本地受控宿主执行一次 write_file 写文件任务；
+  Harness 在工具参数上注入 invalid_args（以 raise_exception 呈现），
+  观察框架是否向调用方返回明确失败信号。
+host: local_controlled
+mode: M0
+
+fault:
+  injection_point: tool_args
+  fault_type: invalid_args
+  surface_as: raise_exception
+  params:
+    corrupt_args:
+      path: 123
+    message: invalid tool arguments (simulated)
+
+# M0 预设脚本：模型输出的手写序列，模型不参与现场生成。
+script:
+  - tool_call:
+      name: write_file
+      args:
+        path: output/hello.txt
+        content: "hello faultlattice\n"
+  - final_answer: 已写入 output/hello.txt。
+
+target_layers: [framework]
+
+expected_postcondition:
+  kind: file_written
+  params:
+    path: output/hello.txt
+    content_contains: hello faultlattice
+
+expected_behavior: >-
+  参数校验在工具执行前显式抛错，文件不应被写入；
+  框架应向调用方返回明确失败信号，且无预注册契约之外的副作用。
+fault_recoverable: true
+allowed_degradation:
+  - 框架记录参数错误并终止本次任务
+
+oracle:
+  source: state
+  determinism: deterministic
+  validation: golden_verified
+  description: >-
+    基于沙箱文件系统状态的断言（文件是否存在、内容是否匹配），
+    加上框架返回给调用方的结果信号；判定规则见 spec 第 5.1 节。
+
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: >-
+  inconclusive 占适用集比例超过阈值时，主表只列原始数量与覆盖率，
+  不把沉默失败率作为对外结论。
