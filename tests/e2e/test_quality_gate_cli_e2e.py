@@ -40,11 +40,13 @@ EXTERNAL_SAMPLES = [
         "20261126T175052-1730a492",
         "20261127T131958-b5e13aff",
         "20261126T180523-058c206a",
+        "20261127T145247-77cdae58",
+        "20261127T145248-20a065b6",
     )
 ]
 
 
-def test_external_agent_quality_gate_cli_compares_four_coordinates(tmp_path: Path) -> None:
+def test_external_agent_quality_gate_cli_compares_six_coordinates(tmp_path: Path) -> None:
     output = tmp_path / "external-agent-quality-gate.md"
     result = CliRunner().invoke(
         app,
@@ -59,7 +61,7 @@ def test_external_agent_quality_gate_cli_compares_four_coordinates(tmp_path: Pat
     )
 
     assert result.exit_code == 0, result.output
-    assert "4 个完整坐标" in result.output
+    assert "6 个完整坐标" in result.output
     text = output.read_text(encoding="utf-8")
     assert '"passed":true' in text
     assert text.count("framework=completed / framework=completed") == 2

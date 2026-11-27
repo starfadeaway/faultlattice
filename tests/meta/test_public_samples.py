@@ -4,9 +4,9 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
-from faultlattice.batch import verify_batch_report
+from faultlattice.batch import validate_ab_tasks, verify_batch_report
 from faultlattice.report import verify_report
-from faultlattice.runner import load_manifest
+from faultlattice.runner import load_judgements, load_manifest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SAMPLE_ROOT = REPO_ROOT / "runs" / "_sample"
@@ -39,6 +39,13 @@ PUBLIC_BATCHES = [
             "20261125T143300-e3c70adc",
         ],
     ),
+    (
+        "2026-11-27-anchorline-memory-result-surface-ab.md",
+        [
+            "20261127T145247-77cdae58",
+            "20261127T145248-20a065b6",
+        ],
+    ),
 ]
 
 
@@ -62,9 +69,26 @@ def test_public_sample_is_complete_relative_and_reproducible(run_dir: Path) -> N
 @pytest.mark.parametrize(
     ("report_name", "run_ids"), PUBLIC_BATCHES, ids=lambda value: str(value)
 )
-def test_public_m3_batch_report_is_reproducible(
-    report_name: str, run_ids: list[str]
-) -> None:
+def test_public_batch_report_is_reproducible(report_name: str, run_ids: list[str]) -> None:
     report_path = REPO_ROOT / "reports" / "external" / report_name
     run_dirs = [SAMPLE_ROOT / run_id for run_id in run_ids]
     assert verify_batch_report(report_path, run_dirs) == []
+
+
+def test_anchorline_surface_pair_is_frozen_and_not_deduplicated() -> None:
+    run_dirs = [
+        SAMPLE_ROOT / "20261127T145247-77cdae58",
+        SAMPLE_ROOT / "20261127T145248-20a065b6",
+    ]
+    manifests = [load_manifest(run_dir) for run_dir in run_dirs]
+    validate_ab_tasks([manifest.task for manifest in manifests])
+    assert {manifest.task.pair_id for manifest in manifests} == {
+        "anchorline-memory-result-surface-v1"
+    }
+    assert {manifest.task.min_evaluable for manifest in manifests} == {2}
+
+    judgements = [load_judgements(run_dir)[0] for run_dir in run_dirs]
+    assert {item.verdict.value for item in judgements} == {"contract_violation"}
+    fact_ids = {item.evidence["fact_id"] for item in judgements}
+    assert len(fact_ids) == 2
+    assert all(item.evidence["task_succeeded"] for item in judgements)

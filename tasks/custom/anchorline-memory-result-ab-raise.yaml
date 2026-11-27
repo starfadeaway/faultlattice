@@ -1,0 +1,45 @@
+# Anchorline 工具结果呈现方式配对 A/B：B 组；执行前冻结，不根据结果修改。
+task_id: anchorline-memory-result-ab
+description: >-
+  在相同预注册条件下调用 Anchorline 生产 memory_write 工具，把专用验收事实写入独立测试数据库；
+  工具真实提交后，将返回给宿主的结果替换为错误对象，核验真实记忆状态与调用方信号。
+host: external
+mode: M0
+fault:
+  injection_point: tool_result
+  fault_type: error_response
+  surface_as: raise_exception
+  params:
+    message: simulated Anchorline memory_write failure
+target_layers:
+- framework
+expected_postcondition:
+  kind: host_state
+  params:
+    summary: 独立测试数据库中 faultlattice.acceptance.ab 的当前值应与预注册配对验收文本一致
+    entity_id: faultlattice.acceptance.ab
+    attribute: anchorline_memory_result_surface
+    value: Anchorline M0 paired tool-result surface A/B 2026-11-27
+script:
+- tool_call:
+    name: memory_write
+    args:
+      entity_id: faultlattice.acceptance.ab
+      attribute: anchorline_memory_result_surface
+      value: Anchorline M0 paired tool-result surface A/B 2026-11-27
+- final_answer: 配对验收记忆已写入。
+expected_behavior: >-
+  两组的生产工具都应实际写入并提交同一验收事实；注入只改变工具观察，不得撤销真实写入。
+  无论错误以普通返回值还是显式异常呈现，宿主都应返回明确失败信号，不得继续给出预设成功回答。
+fault_recoverable: true
+allowed_degradation:
+- 宿主记录故障并向调用方返回明确失败信号，真实状态由独立查询核验
+oracle:
+  source: state
+  determinism: deterministic
+  validation: unvalidated
+  description: 每组运行结束后用全新数据库会话读取同一事实；首次用于配对 A/B，尚未做黄金样例或人工对齐验证
+min_evaluable: 2
+inconclusive_threshold: 0.5
+inconclusive_reporting: 本阶段每组只有一次运行，只展示定性证据与原始数量；比例保持 N/A，不外推稳定失败率。
+pair_id: anchorline-memory-result-surface-v1

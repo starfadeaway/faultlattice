@@ -161,12 +161,14 @@ faultlattice similarity-search "工具错误返回后仍声称成功" --limit 5
 faultlattice quality-gate runs/_sample/20261124T124335-94ebab0a \
   --baseline quality/public-sample.yaml --output reports/quality-gate.md
 
-# 外部 Agent M0 门禁：两个故障坐标 + 两个无故障对照坐标。
+# 外部 Agent M0 门禁：四个既有坐标 + 两个预注册 A/B 坐标。
 faultlattice quality-gate \
   runs/_sample/20261127T131928-4a109d3f \
   runs/_sample/20261126T175052-1730a492 \
   runs/_sample/20261127T131958-b5e13aff \
   runs/_sample/20261126T180523-058c206a \
+  runs/_sample/20261127T145247-77cdae58 \
+  runs/_sample/20261127T145248-20a065b6 \
   --baseline quality/external-agent-m0.yaml \
   --output reports/external-agent-quality-gate.md
 ```

@@ -132,6 +132,8 @@ EXTERNAL_SAMPLES = [
         "20261126T175052-1730a492",
         "20261127T131958-b5e13aff",
         "20261126T180523-058c206a",
+        "20261127T145247-77cdae58",
+        "20261127T145248-20a065b6",
     )
 ]
 NO_FAULT_SAMPLE = EXTERNAL_SAMPLES[0]
@@ -141,7 +143,7 @@ def test_external_agent_public_samples_pass_quality_gate() -> None:
     result = evaluate_quality_gate("external", EXTERNAL_SAMPLES, EXTERNAL_SAMPLES)
 
     assert result.passed, result.violations
-    assert result.matched_coordinates == 4
+    assert result.matched_coordinates == 6
     no_fault = [item for item in result.comparisons if item.coordinate["fault_type"] is None]
     assert len(no_fault) == 2
     for item in no_fault:

@@ -282,6 +282,9 @@ A/B 对照用于比较“同一种故障以不同呈现方式出现”时的差�
 - 两组的宿主、模式、注入位置、故障类型、参数、脚本、后置条件和评价层必须一致。
 - `observation / not_applicable` 没有 return／raise 语义，不属于这类 A/B 对照。
 - 除 `surface_as` 外出现任何条件差异，都应在执行前按配置错误拒绝。
+- 配对任务共用同一个 `task_id`，两个预注册文件分别命名为 `tasks/custom/<task_id>-return.yaml` 与 `tasks/custom/<task_id>-raise.yaml`，并共用同一 `pair_id`。这是普通自定义任务 `<task_id>.yaml` 单文件规则的显式例外；不得以不同 `task_id` 逃避配对硬校验。
+
+本次已执行配对的登记名为 `task_id=anchorline-memory-result-ab`、`pair_id=anchorline-memory-result-surface-v1`；两个文件分别为 `anchorline-memory-result-ab-return.yaml` 与 `anchorline-memory-result-ab-raise.yaml`。后续新增配对仍须先登记并冻结，不得根据既有结果补写配对关系。
 
 示例坐标：
 
