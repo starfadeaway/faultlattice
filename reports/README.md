@@ -6,6 +6,7 @@
 
 | 日期 | 报告 | 被测宿主及版本 | 一句话结论 | 链接 |
 |---|---|---|---|---|
+| 2026-11-27 | Anchorline 真实 Embedding 与 LanceDB 索引验收 | Anchorline 0.1.0 / BAAI-bge-m3 / LanceDB | 修复适配器配置与索引目录映射后，生产写入生成 1 条 1024 维有效向量，现场查询首位命中同一事实；仅为小样本功能验收。 | [验收报告](external/2026-11-27-anchorline-vector-index-acceptance.md) |
 | 2026-11-27 | Anchorline 工具结果呈现方式配对 A/B | Anchorline 0.1.0 | 首组预注册 `return_value / raise_exception` 配对均真实写入并向调用方报失败，Oracle 均为 `contract_violation`；每组一次，只作定性描述。 | [配对报告](external/2026-11-27-anchorline-memory-result-surface-ab.md) |
 | 2026-11-27 | Anchorline 与 LoreKeeper 外部 Agent M0 接入验收 | Anchorline 0.1.0 / LoreKeeper 源码快照 | 两个项目各完成一次无故障对照和一次故障实验，四次均复算一致；Anchorline 故障场景出现“写入成功但报告失败”，LoreKeeper 明确记录参数故障；均为单次 M0 定性证据，不作真实模型或稳定比例结论。 | [验收报告](external/2026-11-27-anchorline-lorekeeper-m0-acceptance.md) |
 | 2026-11-26 | MySQL、真实 Embedding 与 LanceDB 外部依赖验收 | PyMySQL 1.2.4 / BAAI-bge-m3 / LanceDB 0.41.0 | 4 个公开输入复算一致；MySQL 4 行且 ID 唯一，真实向量 2×1024 维，cosine 查询返回 4 条；仅作小样本功能验收。 | [验收报告](external/2026-11-26-external-dependency-acceptance.md) |

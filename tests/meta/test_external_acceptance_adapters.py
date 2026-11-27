@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from external_agents.drafts.anchorline import AnchorlineHostAdapter
 from external_agents.drafts.lorekeeper import LoreKeeperHostAdapter
 from faultlattice.errors import ConfigurationError
 from faultlattice.schemas import ExpectedPostcondition
@@ -86,3 +89,43 @@ def test_lorekeeper_script_rejects_unregistered_result_prefix() -> None:
 
     with pytest.raises(ConfigurationError, match="计算失败.*计算完成"):
         LoreKeeperHostAdapter._parse_script(script)
+
+
+def test_anchorline_prepare_imports_maps_embedding_and_local_index(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "external_projects" / "anchorline" / "src"
+    source.mkdir(parents=True)
+    monkeypatch.setattr(AnchorlineHostAdapter, "_root", classmethod(lambda cls: tmp_path))
+    monkeypatch.setenv("FAULTLATTICE_LLM_SILICONFLOW_API_KEY", "test-only")
+    monkeypatch.setenv("FAULTLATTICE_LLM_SILICONFLOW_BASE_URL", "https://embedding.example/v1")
+    monkeypatch.setenv("FAULTLATTICE_LLM_SILICONFLOW_MODEL_ID", "BAAI/bge-m3")
+    monkeypatch.setenv("FAULTLATTICE_LLM_SILICONFLOW_CAPABILITIES", "embedding")
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "must-not-be-used")
+
+    try:
+        AnchorlineHostAdapter._prepare_imports()
+        index_root = str(tmp_path / ".verify" / "anchorline-lancedb")
+        assert os.environ["SILICONFLOW_API_KEY"] == "test-only"
+        assert os.environ["SILICONFLOW_BASE_URL"] == "https://embedding.example/v1"
+        assert os.environ["SILICONFLOW_EMBEDDING_MODEL"] == "BAAI/bge-m3"
+        assert os.environ["ANCHORLINE_LANCEDB"] == index_root
+        assert os.environ["LANCEDB_URI"] == index_root
+        assert str(source) in sys.path
+    finally:
+        if str(source) in sys.path:
+            sys.path.remove(str(source))
+
+
+def test_anchorline_partial_embedding_config_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FAULTLATTICE_LLM_SILICONFLOW_API_KEY", "test-only")
+    monkeypatch.delenv("FAULTLATTICE_LLM_SILICONFLOW_BASE_URL", raising=False)
+    monkeypatch.setenv("FAULTLATTICE_LLM_SILICONFLOW_MODEL_ID", "BAAI/bge-m3")
+    monkeypatch.setenv("FAULTLATTICE_LLM_SILICONFLOW_CAPABILITIES", "embedding")
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "must-not-be-used")
+
+    with pytest.raises(ConfigurationError, match="完整的硅基流动 embedding"):
+        AnchorlineHostAdapter._configure_embedding()
+    assert os.environ["SILICONFLOW_API_KEY"] == ""

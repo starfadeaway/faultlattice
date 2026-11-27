@@ -33,15 +33,51 @@ class AnchorlineHostAdapter:
     def _root() -> Path:
         return Path(__file__).resolve().parents[2]
 
+    @staticmethod
+    def _configure_embedding() -> None:
+        """显式桥接向量配置；不得回退读取 Anchorline 原项目的 .env。"""
+        prefix = "FAULTLATTICE_LLM_SILICONFLOW_"
+        target_names = (
+            "SILICONFLOW_API_KEY",
+            "SILICONFLOW_BASE_URL",
+            "SILICONFLOW_EMBEDDING_MODEL",
+        )
+        for name in target_names:
+            os.environ[name] = ""
+        api_key = os.environ.get(prefix + "API_KEY", "").strip()
+        base_url = os.environ.get(prefix + "BASE_URL", "").strip()
+        model_id = os.environ.get(prefix + "MODEL_ID", "").strip()
+        capabilities = {
+            item.strip().lower()
+            for item in os.environ.get(prefix + "CAPABILITIES", "").split(",")
+            if item.strip()
+        }
+        if not any((api_key, base_url, model_id, *capabilities)):
+            return
+        if "embedding" not in capabilities or not all((api_key, base_url, model_id)):
+            raise ConfigurationError("Anchorline 向量索引需要完整的硅基流动 embedding 配置")
+        if model_id != "BAAI/bge-m3":
+            raise ConfigurationError("Anchorline 验收向量模型冻结为 BAAI/bge-m3，不能静默替换")
+        os.environ.update(
+            {
+                "SILICONFLOW_API_KEY": api_key,
+                "SILICONFLOW_BASE_URL": base_url,
+                "SILICONFLOW_EMBEDDING_MODEL": model_id,
+            }
+        )
+
     @classmethod
     def _prepare_imports(cls) -> None:
         source = cls._root() / "external_projects" / "anchorline" / "src"
         if not source.is_dir():
             raise ConfigurationError("Anchorline 工作区源码副本不存在")
         sys.path.insert(0, str(source)) if str(source) not in sys.path else None
-        # 索引副作用也限制在 FaultLattice 工作区，绝不使用原项目的 .env 或数据目录。
-        os.environ.setdefault("LANCEDB_URI", str(cls._root() / ".verify" / "anchorline-lancedb"))
-        os.environ.setdefault("LOREKEEPER_LANCE_DIR", "")
+        # 索引副作用限制在工作区；store.py 读取 ANCHORLINE_LANCEDB 而非设置项。
+        index_root = str(cls._root() / ".verify" / "anchorline-lancedb")
+        os.environ["ANCHORLINE_LANCEDB"] = index_root
+        os.environ["LANCEDB_URI"] = index_root
+        os.environ["LOREKEEPER_LANCE_DIR"] = ""
+        cls._configure_embedding()
 
     @staticmethod
     def _mysql_settings() -> dict[str, Any]:

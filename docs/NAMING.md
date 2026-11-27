@@ -594,3 +594,10 @@ task_id × host × mode × experiment_family
 - 适配器队列统一陈列本地上传与 AI 生成草案。详情默认使用 `CodeViewer` 展示说明、资料读取、警告和 Python 代码，编辑需显式切换；用户可补充信息后重新生成，只有新草案成功才替换旧草案，重新生成与确认保存均为独立操作。
 - 草案采样按默认 `temperature=0.1` → `_SAMPLING_PARAMS` → `_ADVISOR_SAMPLING_PARAMS` → 草案专用 `max_tokens` 合并，保留用户配置的思考模式，不静默降级。适配器与任务草案输出上限分别为 16,000 / 8,000 Token，单次超时 120 秒，不自动重试；这些配置不进入 M3 冻结采样。
 - 任务表单提供“正常写入、参数边界、错误返回、空结果、异常传播”五种模板、YAML 模板下载、文件上传和 AI 一键填写；适配器表单提供模板、文件上传与 AI 草案。所有快捷方式只填充可编辑内容，最终保存、登记与运行始终是独立人工操作。
+
+## 20. Anchorline 本地验收环境映射
+
+- `AnchorlineHostAdapter` 只把 FaultLattice 的 `FAULTLATTICE_LLM_SILICONFLOW_API_KEY / BASE_URL / MODEL_ID / CAPABILITIES` 映射为 Anchorline 生产工具读取的 `SILICONFLOW_API_KEY / SILICONFLOW_BASE_URL / SILICONFLOW_EMBEDDING_MODEL`。只有显式声明 `embedding` 且字段完整时才允许真实向量调用；当前冻结模型仍为 `BAAI/bge-m3`，不得静默换成其他模型。
+- 映射只存在于当前后端进程，不写回 `.env`，不进入任务、轨迹、Oracle、报告或公开索引元数据。Anchorline 原项目的 `.env` 不是验收凭据来源；未提供 FaultLattice 配置时必须清空对应进程变量，避免意外读取原项目密钥。
+- Anchorline 实际向量存储读取 `ANCHORLINE_LANCEDB`，其 `Settings.lancedb_uri` 对应 `LANCEDB_URI`。适配器必须同时把两者固定到工作区的 `.verify/anchorline-lancedb`，不能依赖原项目默认 `data/lancedb`，也不得把验收数据写到工作区之外。
+- 原项目的 `facts_index.upsert_fact` 会在失败时返回 `False` 并保留 MySQL 写入。因此“业务写入成功”不等于“向量索引成功”；真实验收必须另行检查 LanceDB 行内容、1024 维有限非零向量和现场查询结果，不能只凭工具返回或日志缺失宣称通过。
