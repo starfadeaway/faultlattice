@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+env:
+  # Windows runner 默认使用 CP1252；统一 CLI 与检查脚本的中文输出编码。
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 jobs:
   test:
     strategy:
