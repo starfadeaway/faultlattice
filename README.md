@@ -182,7 +182,12 @@ Ruff 的 E / F / I / UP / B 规则与 110 字符行宽保持不变。最终 CI �
 - 规范：[docs/spec-v0.1.md](docs/spec-v0.1.md)
 - 命名登记：[docs/NAMING.md](docs/NAMING.md)
 - 实验操作指南：[docs/experiment-guide.md](docs/experiment-guide.md)
+- 交付状态与验收清单：[docs/delivery-status.md](docs/delivery-status.md)
 - 公开报告索引：[reports/README.md](reports/README.md)
+
+## 许可证
+
+FaultLattice 采用 [MIT License](LICENSE)。许可证仅覆盖本仓库代码与文档；外部 Agent、模型服务和第三方依赖仍遵循各自条款。
 
 ## 公开样例
 
