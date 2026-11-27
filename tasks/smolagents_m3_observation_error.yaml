@@ -5,7 +5,7 @@ description: >-
   原始工具结果保持不变，结构化思考字段随真实上下文回传。
 host: smolagents
 mode: M3
-counterfactual_source: runs/20261125T130640-08f7bcf6
+counterfactual_source: runs/_sample/20261125T130640-08f7bcf6
 fault:
   injection_point: observation
   fault_type: error_response

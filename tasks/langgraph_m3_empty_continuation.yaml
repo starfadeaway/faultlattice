@@ -3,7 +3,7 @@ task_id: langgraph_m3_empty_continuation
 description: 真实模型先建立匹配预注册契约的工具调用前缀，再读取注入后的空 ToolMessage，保留并回传原始思考字段后续跑。
 host: langgraph
 mode: M3
-counterfactual_source: runs/20261125T081747-97534dc4
+counterfactual_source: runs/_sample/20261125T081747-97534dc4
 fault:
   injection_point: tool_result
   fault_type: empty_response

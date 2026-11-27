@@ -5,7 +5,7 @@ description: >-
   保存并回传原始思考字段，注入 error_response 后从实际 ToolMessage 续跑。
 host: langgraph
 mode: M3
-counterfactual_source: runs/20261125T081747-3515ca0b
+counterfactual_source: runs/_sample/20261125T081747-3515ca0b
 
 fault:
   injection_point: tool_result

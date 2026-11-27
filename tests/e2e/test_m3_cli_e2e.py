@@ -51,8 +51,11 @@ def test_m3_run_restores_prefix_and_verifies_both_layers(tmp_path: Path) -> None
     runs_root = tmp_path / "runs"
     source_dir = runs_root / "source-m0"
     m3_file = tmp_path / "m3.yaml"
-    raw = (REPO_ROOT / "tasks" / "langgraph_m3.yaml").read_text(encoding="utf-8")
-    raw = raw.replace("runs/20261125T063349-91d8f5da", str(source_dir).replace("\\", "/"))
+    m3_path = REPO_ROOT / "tasks" / "langgraph_m3.yaml"
+    m3_task = load_task(m3_path)
+    assert m3_task.counterfactual_source is not None
+    raw = m3_path.read_text(encoding="utf-8")
+    raw = raw.replace(m3_task.counterfactual_source, str(source_dir).replace("\\", "/"))
     raw = raw.replace("model_id: kimi-k2.5", "model_id: fake-e2e-model")
     # 在源实验和 M3 结果出现前，先冻结 M3 任务声明。
     m3_file.write_text(raw, encoding="utf-8")

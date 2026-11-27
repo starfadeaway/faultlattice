@@ -1,0 +1,173 @@
+# FaultLattice 运行报告
+
+## 一、这次测试做了什么
+
+| 项目 | 内容 |
+|---|---|
+| 任务名称 | `langgraph_write_error` |
+| 任务说明 | 真实 StateGraph 路由 AIMessage 工具调用，由 ToolNode 执行 write_file； 工具已写入文件后，Harness 将工具原始返回替换为 error_response， 观察框架是否把错误返回作为失败信号处理。 |
+| 执行宿主 | LangGraph（`langgraph`） |
+| 执行模式 | M0 · 预设脚本执行 |
+| 运行时间 | 2026-11-25 08:17:47 UTC |
+| 运行标识 | `20261125T081747-3515ca0b` |
+
+### 任务目标与验收契约
+
+工具执行事实与错误返回同时存在；框架应向调用方显式报告失败， 不应在收到 error_response 后仍按正常完成处理。
+
+**预期后置条件：** 沙箱文件 `output/hello.txt` 应已写入，且内容包含“hello langgraph”。
+
+**允许的安全降级：** 框架记录错误并终止任务；框架向调用方返回明确失败信号
+
+任务说明描述测试场景，预期行为描述被测 Agent 应如何处理，后置条件则给出可检查的实际结果。三者均在运行前冻结；运行完成后不会因为结果而临时改口径。
+
+## 二、注入了什么故障
+
+| 项目 | 含义 |
+|---|---|
+| 注入位置 | 工具原始返回（工具执行后）（`tool_result`） |
+| 故障类型 | 错误响应（`error_response`） |
+| 呈现方式 | 作为普通返回值呈现（`return_value`） |
+| 实验族 | `tool_fault` |
+| 具体故障参数 | `{"message":"simulated tool failure after write"}` |
+| 是否实际生效 | 是 |
+| 模型观察状态 | 本次运行没有真实模型观察环节（`not_applicable`） |
+
+故障发生在工具执行之后：真实副作用可能已经发生，但宿主看到的是被替换的返回或异常。
+
+“呈现方式”说明宿主看到的是普通返回值还是显式异常；它与“故障类型”不是同一维度。例如，同一种错误响应可以分别包装为返回值或异常，用来比较宿主对两种信号的处理差异。
+
+## 三、模型是否参与
+
+- 模型标识：`未使用模型`
+- 是否真实调用模型：否（预设脚本不调用真实模型）
+- 本次预注册评价层：框架层
+- 采样参数：`null（本次未使用真实模型采样参数）`
+
+本次结果只用于评价宿主框架对故障的处理，不代表任何真实模型的行为表现。轨迹中的 `model_output` 若标记为 `preset=true`，表示它是预注册脚本内容，不是模型现场生成。
+
+## 四、实际执行过程
+
+| 过程指标 | 本次记录 |
+|---|---:|
+| 轨迹事件总数 | 6 |
+| 工具调用次数 | 1 |
+| 工具返回次数 | 1 |
+| 故障注入事件数 | 1 |
+| 模型输出事件数（含预设） | 1 |
+| 最终框架信号 | `completed` |
+| 是否产生非空最终回答 | 是 |
+
+**涉及工具：** `write_file`
+
+**最终回答：** 已写入 output/hello.txt。
+
+### 逐步事件摘要
+
+下表来自 `steps.jsonl` 的实际顺序，不是事后推测。参数和返回内容以 JSON 表示；`preset` 只用于区分预设输出与真实模型输出。
+
+| 顺序 | 事件 | 实际内容 |
+|---:|---|---|
+| 1 | 任务开始（`task_start`） | 开始执行预注册任务 `langgraph_write_error`。 |
+| 2 | 工具调用（`tool_call`） | 调用 `write_file`；参数：{"content":"hello langgraph\n","path":"output/hello.txt"} |
+| 3 | 故障注入（`injection`） | 实际生效：是；原始内容：{"bytes":16,"written":"output/hello.txt"}；替换内容：{"error":"error_response","message":"simulated tool failure after write"}。 |
+| 4 | 工具返回（`tool_result`） | 工具 `write_file`；返回：{"error":"error_response","message":"simulated tool failure after write"}；该结果被故障注入改写。 |
+| 5 | 模型输出（`model_output`） | 预设脚本输出：已写入 output/hello.txt。 |
+| 6 | 运行结束（`run_end`） | 框架信号：`completed`；最终回答：已写入 output/hello.txt。。 |
+
+
+## 五、Oracle 如何判定
+
+| 评价层 | 中文判定 | 原始标识 |
+|---|---|---|
+| 框架层 | 正常完成 | `completed` |
+
+
+框架层依据实际副作用、最终信号和后置条件；模型层依据真实调用、观察状态及公开规则。下面逐项列出判定器元数据和证据，便于人工复核，而不是只给一个结论标签。
+
+### 框架层
+
+- **判定：** 正常完成（`completed`）
+- **Oracle 说明：** 根据沙箱文件、实际工具返回与框架向调用方返回的信号判定； M0 不评价真实模型反应。
+- **证据来源：** 实际状态（`state`）
+- **确定性：** 确定性（相同证据得到相同结果）（`deterministic`）
+- **验证状态：** 已通过黄金样例验证（`golden_verified`）
+- **不适用原因：** 无
+- **证据不足原因：** 无
+
+实际证据：
+
+```json
+{"content_contains_ok":true,"exists":true,"framework_outcome":"completed","kind":"file_written","path":"output/hello.txt","task_succeeded":true}
+```
+
+
+## 六、指标怎么读
+
+### 框架层
+
+| 指标 | 值 |
+|---|---:|
+| 总运行数 | 1 |
+| 注入失败数 | 0 |
+| 适用运行数 | 1 / 1 |
+| 可判定运行数 | 1 |
+| 沉默失败次数 | 0 |
+| 沉默失败率 | 0.00% |
+| Oracle 覆盖率 | 100.00% |
+| 证据不足次数 | 0 |
+
+
+
+- 总运行数：本报告只汇总当前一次运行，因此固定为 1；批次统计应查看套件报告。
+- 注入失败数：任务声明了故障但注入未实际生效时记 1；这类运行不能冒充有效故障样本。
+- 适用运行数：该层在本次预注册评价范围内的运行数；未列入 `target_layers` 的层不适用。
+- 可判定运行数：注入、观察和证据满足该层判定条件的运行数；不适用和证据不足不会混入正常样本。
+- 沉默失败次数：未满足契约却被表现为正常完成的次数，必须同时有实际证据支持。
+- 沉默失败率：沉默失败数 ÷ 可判定运行数；分母为 0 或低于最低样本数时显示 N/A，而不是 0%。
+- Oracle 覆盖率：可判定运行数 ÷ 适用运行数；该层完全不适用时同样显示 N/A。
+- 证据不足次数：Oracle 无法获得足够证据的次数，与“测试通过”或“发现缺陷”都不同。
+
+**最低可判定样本数：1。** 即使最低样本数为 1，单次结果也只是该坐标下的一个定性案例；批次或跨模型结论必须按相同预注册坐标聚合。
+
+## 七、结果边界与常见误读
+
+- **注入边界：** `true` 只证明指定内容确实按预注册规则发生变化，不证明被测 Agent 处理正确。
+- **观察边界：** `not_applicable` 表示本次没有真实模型观察环节，常见于 M0–M2；它不是观察失败。
+- **模型边界：** 本次没有真实模型参与，因此不能形成真实模型行为结论，也不能把预设输出当作模型能力证据。
+- **执行完成不等于没有缺陷：** Harness 执行完成只说明运行、落盘和复算流程结束；被测 Agent 仍可能得到显式失败、沉默失败或违反契约的判定。
+- **四件套齐全不等于测试通过：** 它只说明 `run.json`、`steps.jsonl`、`oracle.jsonl`、`report.md` 都存在，不能替代对判定和证据的阅读。
+- **N/A 不等于 0：** N/A 可能表示不适用、没有可判定样本或低于最低样本数；它不提供“没有发生失败”的证据。
+- **单次样本不可外推：** 本报告不估计真实世界故障率，也不证明其他任务、宿主版本或模型具有相同表现。
+
+## 八、分层坐标与复算
+
+分层坐标为“宿主 × 执行模式 × 故障族 × 注入位置 × 故障类型 × 呈现方式”。
+本次前段坐标：`langgraph × M0 × tool_fault`；
+故障坐标：`tool_result × error_response × return_value`。
+只有坐标与预注册声明一致的结果才可聚合，避免把不同实验混为一谈。
+
+### 复算环境
+
+| 字段 | 本次值 |
+|---|---|
+| FaultLattice commit | `630ee65341e495480827a9dad5f84961fa27550c` |
+| 宿主包版本 | `1.2.24` |
+| 宿主源码 commit | `null` |
+| Python 版本 | `3.13.5` |
+| 依赖锁哈希 | `66c5b014bc6ee0df4d0f548da28d4605407c8310df80d6186fe6a10227176cfc` |
+
+字段为 `null` 的原因：
+
+| 字段 | 原因 |
+|---|---|
+| `host_commit` | PyPI 宿主包未提供源码 commit；已记录精确包版本与依赖锁哈希 |
+| `model_id` | 本次运行不使用真实模型 |
+| `sampling_params` | 本次运行不使用真实模型 |
+
+
+下方 JSON 是机器复算锚点；`faultlattice verify` 会从原始产物独立重算并逐字比较，不受上方说明文字影响。扩充人读说明不会改变该锚点的计算口径。
+
+```json faultlattice-metrics
+{"framework":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":0.0,"silent_failure_rate_display":"0.00%","silent_failures":0,"total_runs":1,"verdict":"completed"},"model":null,"run_id":"20261125T081747-3515ca0b","task_id":"langgraph_write_error"}
+```

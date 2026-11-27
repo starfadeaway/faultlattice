@@ -57,8 +57,11 @@ def test_smolagents_m3_run_and_verify_both_layers(tmp_path: Path) -> None:
     runs_root = tmp_path / "runs"
     source_dir = runs_root / "source-m0"
     m3_file = tmp_path / "smolagents-m3.yaml"
-    raw = (REPO_ROOT / "tasks" / "smolagents_m3.yaml").read_text(encoding="utf-8")
-    raw = raw.replace("runs/20261125T130640-7ce35788", str(source_dir).replace("\\", "/"))
+    m3_path = REPO_ROOT / "tasks" / "smolagents_m3.yaml"
+    m3_task = load_task(m3_path)
+    assert m3_task.counterfactual_source is not None
+    raw = m3_path.read_text(encoding="utf-8")
+    raw = raw.replace(m3_task.counterfactual_source, str(source_dir).replace("\\", "/"))
     raw = raw.replace("model_id: kimi-k2.5", "model_id: fake-smolagents-e2e")
     # 源实验与 M3 结果出现前，先冻结任务、目标和判定声明。
     m3_file.write_text(raw, encoding="utf-8")

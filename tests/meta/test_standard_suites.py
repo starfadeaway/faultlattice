@@ -29,7 +29,7 @@ def test_standard_suites_have_real_m3_sources() -> None:
 
 
 def test_run_report_is_human_readable_without_breaking_verification() -> None:
-    run_dir = REPO_ROOT / "runs" / "20261125T071752-d22652f8"
+    run_dir = REPO_ROOT / "runs" / "_sample" / "20261125T071752-d22652f8"
     report = render_report(run_dir)
     assert "## 一、这次测试做了什么" in report
     assert "真实 ToolCallingAgent 执行 write_file" in report

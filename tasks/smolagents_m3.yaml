@@ -5,7 +5,7 @@ description: >-
   保留结构化工具调用和原始思考字段，注入 error_response 后从实际 observation 续跑。
 host: smolagents
 mode: M3
-counterfactual_source: runs/20261125T130640-7ce35788
+counterfactual_source: runs/_sample/20261125T130640-7ce35788
 
 fault:
   injection_point: tool_result
