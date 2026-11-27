@@ -1,0 +1,112 @@
+# 人工维护模块、入口与验收要求；status 由后端根据实际检查结果推导。
+name: FaultLattice
+subtitle: Agent Reliability Harness & Evaluation Platform
+
+checks:
+  core-tests:
+    name: 核心元测试与架构检查
+    command: [python, -m, pytest, tests/meta, tests/architecture, -q]
+  cli-e2e:
+    name: CLI 端到端测试
+    command: [python, -m, pytest, tests/e2e, -q]
+  process-timeout-tests:
+    name: 本地同步工具真实进程硬终止测试
+    command: [python, -m, pytest, tests/meta/test_process_timeout.py, tests/e2e/test_process_timeout_cli_e2e.py, -q]
+  console-tests:
+    name: 研发控制台后端与启动器测试
+    command: [python, -m, pytest, tests/console, -q]
+  smolagents-tests:
+    name: smolagents 真实宿主注入与 CLI 端到端测试
+    command: [python, -m, pytest, tests/adapters/test_smolagents.py, tests/e2e/test_smolagents_cli_e2e.py, -q]
+  langgraph-tests:
+    name: LangGraph 真实宿主注入与 CLI 端到端测试
+    command: [python, -m, pytest, tests/adapters/test_langgraph.py, tests/e2e/test_langgraph_cli_e2e.py, -q]
+  m3-tests:
+    name: 双宿主 M3 反事实续跑协议与伪模型端到端测试
+    command: [python, -m, pytest, tests/adapters/test_langgraph_m3.py, tests/adapters/test_smolagents.py, tests/adapters/test_openai_model.py, tests/meta/test_m3.py, tests/e2e/test_m3_cli_e2e.py, tests/e2e/test_smolagents_m3_cli_e2e.py, -q]
+  index-tests:
+    name: MySQL 事务与 LanceDB 相似检索测试
+    command: [python, -m, pytest, tests/meta/test_indexing.py, tests/adapters/test_mysql_index.py, tests/adapters/test_lance_similarity.py, tests/adapters/test_openai_embedding.py, tests/e2e/test_similarity_cli_e2e.py, -q]
+  quality-gate:
+    name: 公开样例 CI 回归质量门禁
+    command: [faultlattice, quality-gate, runs/_sample/20261124T124335-94ebab0a, --baseline, quality/public-sample.yaml, --output, runs/quality-gate.md]
+  external-quality-gate:
+    name: 外部 Agent M0 公开样例回归质量门禁
+    command: [faultlattice, quality-gate, runs/_sample/20261127T131928-4a109d3f, runs/_sample/20261126T175052-1730a492, runs/_sample/20261127T131958-b5e13aff, runs/_sample/20261126T180523-058c206a, --baseline, quality/external-agent-m0.yaml, --output, runs/external-agent-quality-gate.md]
+  ruff:
+    name: Ruff 静态检查
+    command: [python, -m, ruff, check, .]
+  pyright:
+    name: Pyright 类型检查
+    command: [python, -m, pyright]
+  hygiene:
+    name: 仓库卫生检查
+    command: [python, scripts/check_repo_hygiene.py]
+  web-build:
+    name: React 生产构建
+    command: [npm, run, build]
+    cwd: console/web
+
+modules:
+  - id: core
+    name: Harness 核心
+    source_paths: [src/faultlattice]
+    test_paths: [tests/meta, tests/architecture, tests/golden]
+    required_checks: [core-tests, ruff, pyright, hygiene]
+    dependencies: []
+
+  - id: cli
+    name: CLI 纵向切片
+    source_paths: [src/faultlattice/cli.py, tasks/local_write.yaml]
+    test_paths: [tests/e2e]
+    required_checks: [cli-e2e, ruff, pyright]
+    dependencies: [core]
+
+  - id: process-timeout
+    name: 本地同步工具真实硬超时
+    source_paths: [src/faultlattice/process_timeout.py, src/faultlattice/adapters/local.py, tasks/local_hard_timeout.yaml]
+    test_paths: [tests/meta/test_process_timeout.py, tests/e2e/test_process_timeout_cli_e2e.py]
+    required_checks: [process-timeout-tests, cli-e2e, ruff, pyright]
+    dependencies: [core, cli]
+
+  - id: console
+    name: 研发与实验控制台
+    source_paths: [console/server, console/web/src, console/web/vite.config.ts, console/web/package.json, run_all.py, scripts/dev_preview.py, package.json, project.manifest.yaml, experiments/suites.yaml, examples/external_agent, external_agents/registry.yaml]
+    test_paths: [tests/console]
+    required_checks: [console-tests, web-build, ruff, pyright]
+    dependencies: [core, cli]
+
+  - id: smolagents
+    name: smolagents 宿主适配
+    source_paths: [src/faultlattice/adapters/smolagents.py, tasks/smolagents_write.yaml]
+    test_paths: [tests/adapters/test_smolagents.py, tests/e2e/test_smolagents_cli_e2e.py]
+    required_checks: [smolagents-tests, ruff, pyright]
+    dependencies: [core, cli]
+
+  - id: langgraph
+    name: LangGraph 宿主适配
+    source_paths: [src/faultlattice/adapters/langgraph.py, tasks/langgraph_write.yaml]
+    test_paths: [tests/adapters/test_langgraph.py, tests/e2e/test_langgraph_cli_e2e.py]
+    required_checks: [langgraph-tests, ruff, pyright]
+    dependencies: [core, cli]
+
+  - id: m3-protocol
+    name: 双宿主 M3 反事实续跑协议
+    source_paths: [src/faultlattice/model.py, src/faultlattice/counterfactual.py, src/faultlattice/adapters/openai_model.py, src/faultlattice/adapters/langgraph.py, src/faultlattice/adapters/smolagents.py, tasks/langgraph_m3.yaml, tasks/smolagents_m3.yaml, tasks/smolagents_m3_observation_error.yaml]
+    test_paths: [tests/adapters/test_langgraph_m3.py, tests/adapters/test_smolagents.py, tests/adapters/test_openai_model.py, tests/meta/test_m3.py, tests/e2e/test_m3_cli_e2e.py, tests/e2e/test_smolagents_m3_cli_e2e.py]
+    required_checks: [m3-tests, ruff, pyright]
+    dependencies: [core, langgraph, smolagents]
+
+  - id: indexing
+    name: 索引与相似检索
+    source_paths: [src/faultlattice/indexing.py, src/faultlattice/adapters/mysql_index.py, src/faultlattice/adapters/lance_similarity.py, src/faultlattice/adapters/openai_embedding.py, src/faultlattice/cli.py]
+    test_paths: [tests/meta/test_indexing.py, tests/adapters/test_mysql_index.py, tests/adapters/test_lance_similarity.py, tests/adapters/test_openai_embedding.py, tests/e2e/test_similarity_cli_e2e.py]
+    required_checks: [index-tests, ruff, pyright]
+    dependencies: [core, cli]
+
+  - id: quality-gate
+    name: CI 回归质量门禁
+    source_paths: [src/faultlattice/quality.py, src/faultlattice/cli.py, quality/public-sample.yaml, quality/external-agent-m0.yaml]
+    test_paths: [tests/meta/test_quality_gate.py, tests/e2e/test_quality_gate_cli_e2e.py]
+    required_checks: [quality-gate, external-quality-gate, core-tests, cli-e2e, ruff, pyright]
+    dependencies: [core, cli]

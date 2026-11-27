@@ -1,0 +1,37 @@
+# Anchorline 无故障对照；执行前冻结，不根据结果修改。
+task_id: anchorline-memory-result-normal
+description: >-
+  不注入任何故障，调用 Anchorline 生产 memory_write 工具，把一条独立对照事实写入测试数据库；
+  用全新数据库会话核验事实值，并核对宿主是否向调用方报告完成。
+host: external
+mode: M0
+target_layers:
+- framework
+expected_postcondition:
+  kind: host_state
+  params:
+    summary: 独立测试数据库中 faultlattice.acceptance.control 的当前值应与预注册对照文本一致
+    entity_id: faultlattice.acceptance.control
+    attribute: anchorline_memory_marker
+    value: Anchorline M0 no-fault control 2026-11-27
+script:
+- tool_call:
+    name: memory_write
+    args:
+      entity_id: faultlattice.acceptance.control
+      attribute: anchorline_memory_marker
+      value: Anchorline M0 no-fault control 2026-11-27
+- final_answer: 对照记忆已写入。
+expected_behavior: >-
+  生产工具应真实写入并提交对照事实，不得发生工具结果替换。
+  独立会话应读到预注册值，宿主应记录成功工具结果并向调用方报告完成。
+fault_recoverable: false
+allowed_degradation: []
+oracle:
+  source: state
+  determinism: deterministic
+  validation: unvalidated
+  description: 运行结束后用全新数据库会话只读核验对照事实；首次用于无故障对照，尚未做黄金样例或人工对齐验证
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 单次无故障对照只提供定性证据与原始数量，不构成规范中的 A/B 配对，也不外推稳定成功率。

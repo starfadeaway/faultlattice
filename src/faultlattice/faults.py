@@ -3,11 +3,10 @@
 合法组合表见 docs/spec-v0.1.md 第 3 节与 docs/NAMING.md 第 3 节。
 未列出的组合直接报 ConfigurationError，不静默跳过。
 
-注意（spec 第 3 节末）：第一版同步工具超时只做确定性模拟 TimeoutError；
-不得声称 asyncio.to_thread + wait_for 能真正终止同步函数，真实硬终止
-需要进程隔离，后续实现。因此本模块构造的 timeout 效果是"立即抛出
-TimeoutError"，语义上等价于"宿主在超时点收到 TimeoutError"，
-不代表真实时钟等待。
+注意（spec 第 3 节末）：默认 timeout 效果仍是确定性模拟 TimeoutError；
+不得声称 asyncio.to_thread + wait_for 能真正终止同步函数。显式
+``timeout_mode=process`` 由本地受控宿主和 process_timeout 模块执行真实
+进程硬终止，不经过本模块的立即模拟分支。
 """
 
 from __future__ import annotations
@@ -94,7 +93,7 @@ def build_fault_effect(
     message = str(params.get("message", ""))
 
     if fault_type is FaultType.TIMEOUT:
-        # 确定性模拟：不等待真实时钟，直接产生超时效果（见模块 docstring）
+        # 默认确定性模拟；process 模式已在本地 adapter 的进程边界处理。
         text = message or "tool call timed out (simulated)"
         if surface_as is SurfaceAs.RAISE_EXCEPTION:
             return InjectedFaultEffect(exception=TimeoutError(text))

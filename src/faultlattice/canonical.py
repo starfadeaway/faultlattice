@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -61,12 +62,26 @@ def canonical_hash(obj: Any) -> str:
     return sha256_hex(canonical_dumps(obj).encode("utf-8"))
 
 
+def _replace_with_retry(tmp_name: str, path: Path, *, is_windows: bool) -> None:
+    """替换已关闭的临时文件；Windows 瞬态占用只做有限退避，不掩盖持续错误。"""
+    for attempt in range(5):
+        try:
+            os.replace(tmp_name, path)
+            return
+        except PermissionError:
+            # POSIX 的权限错误和 Windows 的持续占用都不能靠无限重试伪装成功。
+            if not is_windows or attempt == 4:
+                raise
+            time.sleep(0.05 * (2**attempt))
+
+
 def atomic_write(path: Path, data: bytes) -> None:
     """原子写入：同目录临时文件 → 写入并关闭 → os.replace。
 
     Windows 上必须先关闭文件句柄再 os.replace，否则目标被占用时会
-    PermissionError；这里用 with 保证句柄释放。tempfile 放在目标同目录，
-    保证 os.replace 是同一文件系统内的原子重命名。
+    PermissionError；这里用 with 保证句柄释放。杀毒软件或索引器还可能
+    短暂占用目标，因此仅在该平台对 PermissionError 做最多五次退避重试。
+    tempfile 放在目标同目录，保证 os.replace 是同一文件系统内的原子重命名。
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -76,7 +91,7 @@ def atomic_write(path: Path, data: bytes) -> None:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp_name, path)
+        _replace_with_retry(tmp_name, path, is_windows=os.name == "nt")
     except BaseException:
         # 清理临时文件，避免失败后在 runs/ 里留下垃圾
         try:

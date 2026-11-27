@@ -24,6 +24,10 @@ class AdapterCapabilityError(FaultLatticeError):
     """adapter 不具备所需能力，或注入点预检失败（防假绿，必须显式报错）。"""
 
 
+class ModelProviderError(FaultLatticeError):
+    """真实模型请求或响应协议失败；不得冒充被注入的实验故障。"""
+
+
 class InjectionError(FaultLatticeError):
     """故障注入机制自身失败（不是"注入的故障生效"）。"""
 

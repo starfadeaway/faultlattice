@@ -5,11 +5,13 @@ CI 在 ubuntu 与 windows 双平台跑这些用例，防止换行 / 编码 /
 """
 
 import math
+import os
 from pathlib import Path
 
 import pytest
 
 from faultlattice.canonical import (
+    _replace_with_retry,
     atomic_write,
     canonical_bytes,
     canonical_dumps,
@@ -74,3 +76,68 @@ def test_atomic_write_uses_lf_on_windows_too(tmp_path: Path) -> None:
     target = tmp_path / "x.json"
     atomic_write(target, canonical_bytes({"k": "v"}))
     assert b"\r\n" not in target.read_bytes()
+
+
+
+def test_windows_replace_retries_transient_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "run.json.tmp"
+    target = tmp_path / "run.json"
+    source.write_bytes(b"new")
+    target.write_bytes(b"old")
+    real_replace = os.replace
+    attempts = 0
+    sleeps: list[float] = []
+
+    def transient_replace(tmp_name: str, path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise PermissionError(5, "模拟杀毒软件短暂占用")
+        real_replace(tmp_name, path)
+
+    monkeypatch.setattr("faultlattice.canonical.os.replace", transient_replace)
+    monkeypatch.setattr("faultlattice.canonical.time.sleep", sleeps.append)
+
+    _replace_with_retry(str(source), target, is_windows=True)
+
+    assert target.read_bytes() == b"new"
+    assert attempts == 3
+    assert sleeps == [0.05, 0.1]
+
+
+def test_windows_replace_does_not_hide_persistent_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "run.json.tmp"
+    source.write_bytes(b"new")
+    attempts = 0
+
+    def locked_replace(_tmp_name: str, _path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise PermissionError(5, "模拟持续占用")
+
+    monkeypatch.setattr("faultlattice.canonical.os.replace", locked_replace)
+    monkeypatch.setattr("faultlattice.canonical.time.sleep", lambda _seconds: None)
+
+    with pytest.raises(PermissionError, match="持续占用"):
+        _replace_with_retry(str(source), tmp_path / "run.json", is_windows=True)
+    assert attempts == 5
+
+
+def test_non_windows_permission_error_is_not_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attempts = 0
+
+    def denied_replace(_tmp_name: str, _path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise PermissionError(13, "模拟权限不足")
+
+    monkeypatch.setattr("faultlattice.canonical.os.replace", denied_replace)
+    with pytest.raises(PermissionError, match="权限不足"):
+        _replace_with_retry("unused.tmp", tmp_path / "run.json", is_windows=False)
+    assert attempts == 1

@@ -1,0 +1,32 @@
+# LangGraph 参数故障 M0；运行前冻结预期。
+task_id: langgraph_args_error
+description: 在真实 ToolNode 校验前把 write_file 的 path 改成整数，检查 LangGraph 的参数错误传播。
+host: langgraph
+mode: M0
+fault:
+  injection_point: tool_args
+  fault_type: invalid_args
+  surface_as: raise_exception
+  params:
+    corrupt_args: {path: 123}
+    message: invalid tool arguments (simulated)
+script:
+  - tool_call:
+      name: write_file
+      args: {path: output/hello.txt, content: "hello langgraph args\n"}
+  - final_answer: 已写入 output/hello.txt。
+target_layers: [framework]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello langgraph args}
+expected_behavior: 真实 ToolNode 应在写入前拒绝非法参数；文件不得写入，调用方应收到明确失败。
+fault_recoverable: true
+allowed_degradation: [框架记录参数错误并终止本次任务]
+oracle:
+  source: state
+  determinism: deterministic
+  validation: golden_verified
+  description: 联合检查沙箱文件、参数异常与图最终状态；M0 不评价真实模型。
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 证据不足超过阈值时只报告原始数量与覆盖率。

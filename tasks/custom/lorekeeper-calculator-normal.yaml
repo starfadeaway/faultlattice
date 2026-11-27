@@ -1,0 +1,34 @@
+# LoreKeeper 无故障对照；执行前冻结，不根据结果修改。
+task_id: lorekeeper-calculator-normal
+description: >-
+  不注入任何故障，让 LoreKeeper 生产 ReAct 循环调用 calculator 计算 (0.8 + 0.2) * 1000；
+  核验原始参数未被改写、生产步骤成功、工具失败计数为零，以及宿主向调用方报告完成。
+host: external
+mode: M0
+target_layers:
+- framework
+expected_postcondition:
+  kind: host_state
+  params:
+    summary: 生产 AgentState 应恰好记录一次使用原算式的成功 calculator 调用，且工具失败计数为 0
+    original_expression: (0.8 + 0.2) * 1000
+script:
+- tool_call:
+    id: faultlattice-lorekeeper-calculator-control-0
+    name: calculator
+    args:
+      expression: (0.8 + 0.2) * 1000
+- final_answer: '[计算完成] 原算式已由生产计算器成功执行。'
+expected_behavior: >-
+  生产循环应使用未经修改的原算式实际执行 calculator 并收到成功结果。
+  AgentState 应留下一个成功步骤且 tool_failures=0，宿主应向调用方报告完成；不得出现注入事件。
+fault_recoverable: false
+allowed_degradation: []
+oracle:
+  source: state
+  determinism: deterministic
+  validation: unvalidated
+  description: 运行结束后只读检查生产 AgentState 的步骤、原始参数、成功状态和失败计数；首次用于无故障对照，尚未做黄金样例或人工对齐验证
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 单次无故障对照只提供定性证据与原始数量，不构成规范中的 A/B 配对，也不外推稳定成功率；预设回答不代表真实模型行为。

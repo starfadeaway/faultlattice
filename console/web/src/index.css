@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* primitive → semantic → component：明暗主题共用同一组语义令牌。 */
+  --accent: #22d3ee;
+  --dark-950: oklch(0.16 0.018 240);
+  --dark-900: oklch(0.20 0.022 240);
+  --dark-850: oklch(0.24 0.024 240);
+  --dark-text: oklch(0.91 0.014 225);
+  --dark-muted: oklch(0.73 0.02 230);
+  --light-100: oklch(0.97 0.008 230);
+  --light-200: oklch(0.94 0.012 230);
+  --light-text: oklch(0.27 0.028 240);
+  --light-muted: oklch(0.43 0.025 240);
+
+  --color-page: var(--dark-950);
+  --color-surface: var(--dark-900);
+  --color-raised: var(--dark-850);
+  --color-text: var(--dark-text);
+  --color-muted: var(--dark-muted);
+  --color-border: oklch(0.34 0.025 240);
+  --color-accent: var(--accent);
+  --color-on-accent: oklch(0.19 0.025 240);
+  --component-panel-bg: oklch(0.215 0.023 240 / 0.88);
+  --component-terminal-bg: oklch(0.14 0.018 240);
+  --component-code-font: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  color: var(--color-text);
+  background: var(--color-page);
+  font-family: "Segoe UI Variable", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --color-page: var(--light-200);
+  --color-surface: var(--light-100);
+  --color-raised: oklch(0.985 0.005 230);
+  --color-text: var(--light-text);
+  --color-muted: var(--light-muted);
+  --color-border: oklch(0.84 0.018 230);
+  --color-on-accent: oklch(0.19 0.025 240);
+  --component-panel-bg: oklch(0.975 0.008 230 / 0.94);
+  --component-terminal-bg: oklch(0.95 0.012 230);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { min-width: 320px; background: var(--color-page); }
+body { margin: 0; min-width: 320px; min-height: 100dvh; font-size: 16px; line-height: 1.65; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
+button, a { cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+code { font-family: var(--component-code-font); font-size: 0.88em; overflow-wrap: anywhere; }
+::selection { color: var(--color-on-accent); background: var(--color-accent); }
+
+
+/* 用户可显式提高文字与边界对比度；明暗主题分别调整，不影响实验事实色。 */
+:root[data-contrast="high"] {
+  --dark-muted: oklch(0.82 0.015 230);
+  --light-muted: oklch(0.34 0.025 240);
+  --color-border: oklch(0.52 0.025 240);
+}
+:root[data-theme="light"][data-contrast="high"] { --color-border: oklch(0.67 0.025 240); }
+:root[data-code-wrap="off"] .code-view code { white-space: pre !important; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

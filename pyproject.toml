@@ -19,12 +19,39 @@ dependencies = [
 faultlattice = "faultlattice.cli:app"
 
 [dependency-groups]
-# 只声明当前实际使用的组；smolagents / models 等组在接入对应宿主时再添加，
-# 不预置空组或装饰性依赖。
+# 只声明当前实际使用的依赖组，不预置空组或装饰性依赖。
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5",
     "ruff>=0.8",
     "pyright>=1.1",
+    # console 阶段实际使用；核心包不导入这些依赖，AST 检查持续约束边界。
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.34,<1",
+    "httpx>=0.28,<1",
+]
+smolagents = [
+    "smolagents==1.26.0",
+]
+langgraph = [
+    "langgraph==1.2.24",
+]
+models = [
+    "openai==3.59.0",
+]
+mysql = [
+    "pymysql>=1.1,<2",
+]
+similarity = [
+    "lancedb>=0.25,<1",
+    "pyarrow>=18,<24",
+]
+anchorline = [
+    "pydantic-settings>=2.6,<3",
+    "sqlalchemy>=2.0.36,<3",
+]
+lorekeeper = [
+    "jieba==0.42.1",
+    "rank-bm25==0.2.2",
 ]

@@ -1,0 +1,30 @@
+# smolagents 模型观察故障 M0；运行前冻结预期。
+task_id: smolagents_observation_error
+description: 工具真实写入后，只把进入下一轮预设模型上下文的内容替换成错误文本，验证观察注入确实到达宿主上下文。
+host: smolagents
+mode: M0
+fault:
+  injection_point: observation
+  fault_type: error_response
+  surface_as: not_applicable
+  params: {message: simulated corrupted observation}
+script:
+  - tool_call:
+      name: write_file
+      args: {path: output/hello.txt, content: "hello smolagents observation\n"}
+  - final_answer: 已写入 output/hello.txt。
+target_layers: [framework]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello smolagents observation}
+expected_behavior: 原始工具结果和文件副作用保持不变，仅模型观察被替换；M0 预设最终回答不代表真实模型反应。
+fault_recoverable: true
+allowed_degradation: [记录观察替换并按预设脚本结束]
+oracle:
+  source: state
+  determinism: deterministic
+  validation: golden_verified
+  description: 检查文件、原始工具结果、观察注入事件与宿主最终信号；不把预设输出当作模型评价。
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 证据不足超过阈值时只报告原始数量与覆盖率。

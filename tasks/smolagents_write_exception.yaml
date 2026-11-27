@@ -1,0 +1,30 @@
+# smolagents 工具返回异常 M0；运行前冻结预期。
+task_id: smolagents_write_exception
+description: 工具已写入文件后，将原始返回改成 RuntimeError，检查 smolagents 是否把异常显式传给调用方。
+host: smolagents
+mode: M0
+fault:
+  injection_point: tool_result
+  fault_type: error_response
+  surface_as: raise_exception
+  params: {message: simulated tool failure after write}
+script:
+  - tool_call:
+      name: write_file
+      args: {path: output/hello.txt, content: "hello smolagents exception\n"}
+  - final_answer: 已写入 output/hello.txt。
+target_layers: [framework]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello smolagents exception}
+expected_behavior: 文件副作用与工具异常同时存在；框架应记录异常并返回明确失败，不得宣称整个任务正常完成。
+fault_recoverable: true
+allowed_degradation: [框架记录工具异常并终止任务]
+oracle:
+  source: state
+  determinism: deterministic
+  validation: golden_verified
+  description: 根据真实文件、注入事件和调用方信号判定；不评价预设脚本中的模型行为。
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 证据不足超过阈值时只报告原始数量与覆盖率。

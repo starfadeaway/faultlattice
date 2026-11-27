@@ -1,0 +1,9 @@
+{
+  "name": "faultlattice-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev_preview.mjs",
+    "build": "npm --prefix console/web run build",
+    "lint": "npm --prefix console/web run lint"
+  }
+}

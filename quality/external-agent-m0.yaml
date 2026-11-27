@@ -1,0 +1,8 @@
+# 四次真实外部 Agent M0 验收的公开四件套；无故障与故障坐标分别比较。
+schema_version: 1
+name: public-external-agent-m0
+runs:
+  - runs/_sample/20261127T131928-4a109d3f
+  - runs/_sample/20261126T175052-1730a492
+  - runs/_sample/20261127T131958-b5e13aff
+  - runs/_sample/20261126T180523-058c206a

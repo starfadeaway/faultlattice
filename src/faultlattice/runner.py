@@ -14,10 +14,18 @@ from pathlib import Path
 import yaml
 
 from faultlattice.errors import ConfigurationError, TraceFormatError
-from faultlattice.host import HostAdapter
+from faultlattice.host import (
+    CounterfactualHost,
+    HostAdapter,
+    PostconditionObservation,
+    StatefulHost,
+)
+from faultlattice.model import ModelProvider
 from faultlattice.oracle.judge import (
     FrameworkEvidence,
+    ModelEvidence,
     judge_framework,
+    judge_model,
     resolve_not_applicable_reason,
 )
 from faultlattice.schemas import (
@@ -57,8 +65,10 @@ def _new_run_id(task_id: str) -> str:
     return f"{now.strftime('%Y%m%dT%H%M%S')}-{sha256_hex(seed)[:8]}"
 
 
-def _evaluate_postcondition(task: TaskDefinition, sandbox: Path) -> tuple[bool, dict]:
-    """检查预期后置条件是否成立（state 类 Oracle 的事实来源）。"""
+def _evaluate_postcondition(
+    task: TaskDefinition, sandbox: Path, host: HostAdapter
+) -> tuple[bool, bool, dict]:
+    """分别返回任务完成、副作用符合预期和原始证据，三者不能混为一谈。"""
     pc = task.expected_postcondition
     if pc.kind == "file_written":
         rel = pc.params.get("path", "")
@@ -68,14 +78,82 @@ def _evaluate_postcondition(task: TaskDefinition, sandbox: Path) -> tuple[bool, 
         if exists and "content_contains" in pc.params:
             contains_ok = pc.params["content_contains"] in target.read_text(encoding="utf-8")
         ok = exists and contains_ok
-        return ok, {
+        return ok, ok, {
             "kind": pc.kind,
             "path": rel,
             "exists": exists,
             "content_contains_ok": contains_ok,
         }
+    if pc.kind == "file_absent":
+        rel = pc.params.get("path", "")
+        exists = (sandbox / rel).exists()
+        side_effect_ok = not exists
+        # 当前用于 write_file 硬超时：文件按预期未写入，但写入任务并未完成。
+        return False, side_effect_ok, {"kind": pc.kind, "path": rel, "exists": exists}
+    if pc.kind == "host_state":
+        if not isinstance(host, StatefulHost):
+            return False, False, {
+                "kind": pc.kind,
+                "evidence_sufficient": False,
+                "observation_summary": "宿主未实现 StatefulHost，无法核验业务状态",
+            }
+        try:
+            observed = host.observe_postcondition(pc, sandbox=sandbox)
+        except Exception as exc:
+            return False, False, {
+                "kind": pc.kind,
+                "evidence_sufficient": False,
+                "observation_summary": f"业务状态观察失败（{type(exc).__name__}），未形成判定证据",
+            }
+        if not isinstance(observed, PostconditionObservation):
+            return False, False, {
+                "kind": pc.kind,
+                "evidence_sufficient": False,
+                "observation_summary": "宿主返回了非法的业务状态观察类型",
+            }
+        evidence = {
+            "kind": pc.kind,
+            "evidence_sufficient": observed.evidence_sufficient,
+            **observed.evidence,
+        }
+        return observed.task_succeeded, observed.side_effects_as_expected, evidence
     # 未知的 postcondition 类型：证据不足，由 Oracle 判 inconclusive
-    return False, {"kind": pc.kind, "unknown_postcondition_kind": True}
+    return False, False, {"kind": pc.kind, "unknown_postcondition_kind": True}
+
+
+def _model_rule_evidence(
+    final_answer: str | None, task_succeeded: bool
+) -> tuple[ModelEvidence, dict]:
+    """用公开、确定性的文本规则提取模型回答证据。
+
+    该规则只识别明确的成功 / 失败声明，不声称理解任意自然语言。混合回答
+    （例如“文件已写入，但工具返回错误”）不会被简单归类为任务失败。
+    """
+    answer = final_answer or ""
+    lowered = answer.lower()
+    failure_markers = ["失败", "无法", "未能", "错误", "failed", "failure", "error"]
+    success_markers = ["已写入", "已完成", "成功", "written", "completed", "success"]
+    matched_failure = [marker for marker in failure_markers if marker in lowered]
+    matched_success = [marker for marker in success_markers if marker in lowered]
+    states_failure = bool(matched_failure) and not matched_success
+    success_without_support = bool(matched_success) and not task_succeeded
+    evidence = ModelEvidence(
+        evidence_sufficient=True,
+        task_succeeded=task_succeeded,
+        final_answer_states_failure=states_failure,
+        final_answer_empty_or_irrelevant=not answer.strip(),
+        success_claim_without_support=success_without_support,
+        behavior_matches_contract=True,
+        final_answer_supported=not success_without_support,
+    )
+    details = {
+        "final_answer": answer,
+        "matched_failure_markers": matched_failure,
+        "matched_success_markers": matched_success,
+        "task_succeeded": task_succeeded,
+        "rule": "failure markers without success markers; success claims require state support",
+    }
+    return evidence, details
 
 
 def execute_run(
@@ -85,19 +163,31 @@ def execute_run(
     runs_root: Path,
     repo_root: Path,
     run_id: str | None = None,
+    script_override: list[dict] | None = None,
+    model_provider: ModelProvider | None = None,
 ) -> Path:
-    """执行一次 M0 运行并写出四件套，返回 run 目录。
-
-    预期注入故障是实验数据：宿主因注入故障而失败时本函数正常返回，
-    只有 Harness 自身错误才抛异常（对应 CLI 非零退出码）。
-    """
+    """执行 M0–M3 并写出四件套；M3 由支持续跑的宿主接管真实图循环。"""
     run_id = run_id or _new_run_id(task.task_id)
     run_dir = Path(runs_root) / run_id
     sandbox = run_dir / "sandbox"
     writer = TraceWriter(run_dir)
 
     # --- 执行宿主（含故障注入） ---
-    result = host.run_script(task.script, fault=task.fault, sandbox=sandbox)
+    if task.mode.value == "M3":
+        if model_provider is None or not isinstance(host, CounterfactualHost):
+            raise ConfigurationError("M3 需要真实 ModelProvider 与支持反事实续跑的宿主")
+        if task.fault is None:
+            raise ConfigurationError("M3 缺少故障声明")
+        result = host.run_counterfactual(
+            script_override or task.script,
+            fault=task.fault,
+            sandbox=sandbox,
+            model_provider=model_provider,
+        )
+    else:
+        if model_provider is not None:
+            raise ConfigurationError("M0–M2 不得调用真实模型")
+        result = host.run_script(task.script, fault=task.fault, sandbox=sandbox)
 
     # --- 记录 steps.jsonl ---
     seq = 0
@@ -146,12 +236,19 @@ def execute_run(
     else:
         injection_applied = all(e.get("applied") for e in injection_events)
 
-    # M0–M2 不要求故障到达真实模型（spec 第 4.3 节）
-    observation_status = ObservationStatus.NOT_APPLICABLE
+    # M0–M2 不要求故障到达真实模型；M3 只接受宿主对实际模型输入的核对结果。
+    observation_status = ObservationStatus(result.observation_status)
+    if task.mode.value != "M3":
+        observation_status = ObservationStatus.NOT_APPLICABLE
 
     # --- Oracle 判定 ---
-    task_succeeded, pc_evidence = _evaluate_postcondition(task, sandbox)
-    evidence_sufficient = not pc_evidence.get("unknown_postcondition_kind", False)
+    task_succeeded, side_effects_as_expected, pc_evidence = _evaluate_postcondition(
+        task, sandbox, host
+    )
+    evidence_sufficient = (
+        not pc_evidence.get("unknown_postcondition_kind", False)
+        and pc_evidence.get("evidence_sufficient", True) is True
+    )
     failure_signal = result.framework_outcome == "failed"
 
     timestamp = datetime.now(UTC)
@@ -174,7 +271,7 @@ def execute_run(
                         evidence_sufficient=evidence_sufficient,
                         task_succeeded=task_succeeded,
                         failure_signal_to_caller=failure_signal,
-                        side_effects_as_expected=task_succeeded,
+                        side_effects_as_expected=side_effects_as_expected,
                         success_without_execution_support=(
                             result.framework_outcome == "completed" and not task_succeeded
                         ),
@@ -202,23 +299,64 @@ def execute_run(
                 )
             writer.append_oracle(judgement)
         else:
-            # 模型层：M0–M2 恒为 not_applicable，原因按固定顺序取第一个匹配
+            model_evidence, model_details = _model_rule_evidence(
+                result.final_answer, task_succeeded
+            )
             reason = resolve_not_applicable_reason(
                 layer=layer,
                 target_layers=task.target_layers,
                 injection_applied=injection_applied,
                 mode=task.mode,
-                model_invoked=False,
+                model_invoked=result.model_invoked,
             )
-            judgement = OracleJudgement(
-                run_id=run_id,
-                layer=layer,
-                verdict=ModelVerdict.NOT_APPLICABLE,
-                not_applicable_reason=reason,
-                oracle=task.oracle,
-                evidence={"mode": task.mode.value},
-                timestamp=timestamp,
-            )
+            if not injection_applied and task.fault is not None:
+                judgement = OracleJudgement(
+                    run_id=run_id,
+                    layer=layer,
+                    verdict=ModelVerdict.INCONCLUSIVE,
+                    inconclusive_reason=InconclusiveReason.INJECTION_FAILED,
+                    oracle=task.oracle,
+                    evidence={"injection_events": injection_events, **pc_evidence},
+                    timestamp=timestamp,
+                )
+            elif reason is not None:
+                judgement = OracleJudgement(
+                    run_id=run_id,
+                    layer=layer,
+                    verdict=ModelVerdict.NOT_APPLICABLE,
+                    not_applicable_reason=reason,
+                    oracle=task.oracle,
+                    evidence={
+                        "mode": task.mode.value,
+                        "model_invoked": result.model_invoked,
+                    },
+                    timestamp=timestamp,
+                )
+            else:
+                verdict = (
+                    judge_model(model_evidence)
+                    if observation_status is ObservationStatus.REACHED
+                    else ModelVerdict.INCONCLUSIVE
+                )
+                judgement = OracleJudgement(
+                    run_id=run_id,
+                    layer=layer,
+                    verdict=verdict,
+                    inconclusive_reason=(
+                        InconclusiveReason.ORACLE_EVIDENCE_INSUFFICIENT
+                        if verdict is ModelVerdict.INCONCLUSIVE
+                        else None
+                    ),
+                    oracle=task.oracle,
+                    evidence={
+                        "mode": task.mode.value,
+                        "model_invoked": result.model_invoked,
+                        "observation_status": observation_status.value,
+                        **pc_evidence,
+                        **model_details,
+                    },
+                    timestamp=timestamp,
+                )
             writer.append_oracle(judgement)
 
     # --- run.json（预注册声明原样复制，spec 第 4.1 节） ---
@@ -226,10 +364,16 @@ def execute_run(
         run_id=run_id,
         created_at=timestamp,
         task=task,
-        versions=collect_versions(repo_root, host_package_version=host.package_version),
+        versions=collect_versions(
+            repo_root,
+            host_package_version=host.package_version,
+            host_commit=getattr(host, "host_commit", None),
+            model_id=result.model_id,
+            sampling_params=result.sampling_params,
+        ),
         injection_applied=injection_applied,
         observation_status=observation_status,
-        model_invoked=False,
+        model_invoked=result.model_invoked,
         run_dir=str(run_dir),
     )
     writer.write_run_json(manifest)

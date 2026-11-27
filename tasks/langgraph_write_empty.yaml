@@ -1,0 +1,30 @@
+# LangGraph 工具空返回 M0；同时作为对应 M3 的只读源任务。
+task_id: langgraph_write_empty
+description: 工具真实写入后，把原始返回值替换为空对象，观察框架对无错误文本、无有效结果的处理。
+host: langgraph
+mode: M0
+fault:
+  injection_point: tool_result
+  fault_type: empty_response
+  surface_as: return_value
+  params: {empty: {}}
+script:
+  - tool_call:
+      name: write_file
+      args: {path: output/hello.txt, content: "hello langgraph empty\n"}
+  - final_answer: 已写入 output/hello.txt。
+target_layers: [framework]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello langgraph empty}
+expected_behavior: 文件写入事实应保留，空返回不得被伪造成成功结果内容；M0 只评价宿主信号，不评价真实模型。
+fault_recoverable: true
+allowed_degradation: [保留空返回并让预设脚本结束]
+oracle:
+  source: state
+  determinism: deterministic
+  validation: golden_verified
+  description: 根据真实文件、空返回和最终信号判定，不编造工具返回中不存在的错误。
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 证据不足超过阈值时只报告原始数量与覆盖率。

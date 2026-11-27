@@ -1,0 +1,44 @@
+# LoreKeeper 首次真实 ReAct 接入的预注册任务；执行前冻结，不根据结果修改。
+task_id: lorekeeper-calculator-invalid-args
+description: >-
+  让 LoreKeeper 生产 ReAct 循环调用 calculator 计算 (0.8 + 0.2) * 1000；
+  在真实工具执行前把 expression 改为除零算式，核验生产 StepRecord、失败计数和最终信号。
+host: external
+mode: M0
+fault:
+  injection_point: tool_args
+  fault_type: invalid_args
+  surface_as: return_value
+  params:
+    corrupt_args:
+      expression: 1 / 0
+    message: simulated LoreKeeper calculator invalid arguments
+target_layers:
+- framework
+expected_postcondition:
+  kind: host_state
+  params:
+    summary: 生产 AgentState 应记录注入后的除零错误；原算式没有成功计算结果，工具失败计数应为 1
+    original_expression: (0.8 + 0.2) * 1000
+    corrupted_expression: 1 / 0
+script:
+- tool_call:
+    id: faultlattice-lorekeeper-calculator-0
+    name: calculator
+    args:
+      expression: (0.8 + 0.2) * 1000
+- final_answer: '[计算失败] 工具参数无效，无法完成原算式。'
+expected_behavior: >-
+  生产循环应实际执行 calculator 并收到除零错误；原算式不得产生成功结果。
+  宿主应记录失败步骤和 tool_failures=1，并通过适配器的 [计算失败] 前缀向调用方返回明确失败信号。
+fault_recoverable: true
+allowed_degradation:
+- 宿主记录参数故障、返回明确失败回答，并保留可复核的生产 AgentState
+oracle:
+  source: state
+  determinism: deterministic
+  validation: unvalidated
+  description: 运行结束后只读检查生产 AgentState 的步骤、参数、错误文本和失败计数；首次使用，尚未做黄金样例或人工对齐验证
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 单次冒烟只展示定性证据与原始数量，不计算或宣称稳定失败率；预设回答不代表真实模型行为。

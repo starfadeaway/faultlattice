@@ -2,6 +2,9 @@
 # 后续调整 lint 规则必须作为显式变更记录（提交信息中说明原因）。
 line-length = 110
 target-version = "py313"
+# 只检查 FaultLattice 自身代码；临时验收脚本和外部项目源码副本不伪装成本项目已检查。
+# 两个目录同时加入 .gitignore；external_agents/ 中实际接入的适配器仍正常接受检查。
+extend-exclude = [".verify", "external_projects"]
 
 [lint]
 select = ["E", "F", "I", "UP", "B"]

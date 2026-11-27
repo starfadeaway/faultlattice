@@ -1,0 +1,44 @@
+# 真实进程硬超时预注册；独立于旧的立即模拟 TimeoutError 任务。
+task_id: local_process_hard_timeout
+description: >-
+  本地受控宿主把 write_file 放入独立 spawn 子进程；工具在真实写入前阻塞，
+  Harness 到达预注册期限后终止并回收子进程，再向调用方传播 TimeoutError。
+host: local_controlled
+mode: M0
+fault:
+  injection_point: tool_result
+  fault_type: timeout
+  surface_as: raise_exception
+  params:
+    timeout_mode: process
+    timeout_seconds: 0.2
+    tool_delay_seconds: 2.0
+    message: real process timeout; worker terminated
+target_layers: [framework]
+expected_postcondition:
+  kind: file_absent
+  params:
+    path: output/hard-timeout.txt
+expected_behavior: >-
+  工具必须在真实时钟期限后被硬终止，框架向调用方报告明确失败；等待原阻塞时长后，
+  目标文件仍不得出现，以证明子进程没有继续执行。进程提前完成则属于注入未生效。
+fault_recoverable: true
+allowed_degradation:
+  - 框架明确报告 TimeoutError 并停止后续最终回答
+oracle:
+  source: state
+  determinism: deterministic
+  validation: golden_verified
+  description: >-
+    检查真实耗时、worker PID、process_terminated、TimeoutError 信号和 file_absent；
+    子进程内部异常属于 Harness 错误，不得冒充超时。
+min_evaluable: 1
+inconclusive_threshold: 0.0
+inconclusive_reporting: 进程未实际超时或注入证据不完整时只报告 inconclusive，不输出成功结论。
+script:
+  - tool_call:
+      name: write_file
+      args:
+        path: output/hard-timeout.txt
+        content: "must not be written after hard timeout\n"
+  - final_answer: 不应到达最终回答。

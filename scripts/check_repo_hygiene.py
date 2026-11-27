@@ -16,7 +16,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-REQUIRED_GITIGNORE_RULES = ["runs/*", "!runs/_sample/", "!runs/_sample/**", ".env"]
+REQUIRED_GITIGNORE_RULES = [
+    "runs/*",
+    "!runs/_sample/",
+    "!runs/_sample/**",
+    ".env",
+    ".verify/",
+    "external_projects/",
+]
 
 
 def check_gitignore() -> list[str]:

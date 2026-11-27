@@ -3,8 +3,11 @@ runs/*
 !runs/_sample/
 !runs/_sample/**
 
-# 本地凭据
+# 本地凭据、上传资料、临时验收文件与外部项目源码副本
 .env
+external_agents/uploads/
+.verify/
+external_projects/
 
 # Python / 工具链
 .venv/
@@ -22,3 +25,8 @@ coverage.xml
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 研发控制台前端与本地日志
+node_modules/
+console/web/dist/
+*.log

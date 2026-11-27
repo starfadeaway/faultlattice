@@ -24,9 +24,9 @@ jobs:
           node-version: "22"
 
       - name: 同步依赖（uv.lock 为唯一事实来源）
-        run: uv sync --locked
+        run: uv sync --locked --group smolagents --group langgraph --group models --group mysql --group similarity
 
-      - name: pytest（含 golden / meta / architecture / e2e）
+      - name: pytest（含 golden / meta / architecture / adapters / e2e）
         run: uv run pytest
 
       - name: Ruff
@@ -40,3 +40,18 @@ jobs:
 
       - name: 仓库卫生检查
         run: uv run python scripts/check_repo_hygiene.py
+
+      - name: 公开样例回归质量门禁
+        run: uv run faultlattice quality-gate runs/_sample/20261124T124335-94ebab0a --baseline quality/public-sample.yaml --output reports/quality-gate.md
+
+      - name: 外部 Agent M0 公开样例回归质量门禁
+        run: uv run faultlattice quality-gate runs/_sample/20261127T131928-4a109d3f runs/_sample/20261126T175052-1730a492 runs/_sample/20261127T131958-b5e13aff runs/_sample/20261126T180523-058c206a --baseline quality/external-agent-m0.yaml --output reports/external-agent-quality-gate.md
+
+      - name: 安装研发视图依赖（lockfile 固定）
+        run: npm ci --prefix console/web
+
+      - name: 研发视图 ESLint
+        run: npm run lint --prefix console/web
+
+      - name: 研发视图生产构建
+        run: npm run build --prefix console/web

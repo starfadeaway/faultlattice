@@ -22,13 +22,37 @@
 
 from __future__ import annotations
 
+import math
+import time
 from pathlib import Path
 from typing import Any
 
 from faultlattice.errors import AdapterCapabilityError, ConfigurationError
 from faultlattice.faults import build_fault_effect
 from faultlattice.host import HostRunResult
-from faultlattice.schemas import FaultSpec, InjectionPoint, SurfaceAs
+from faultlattice.process_timeout import ProcessTimeoutError, run_with_process_timeout
+from faultlattice.schemas import FaultSpec, FaultType, InjectionPoint, SurfaceAs
+
+
+def _write_file_tool(
+    args: dict[str, Any], sandbox: Path, *, delay_seconds: float = 0.0
+) -> dict[str, Any]:
+    """顶层工具入口必须可由 spawn 序列化；延迟发生在真实写入之前。"""
+    path = args.get("path")
+    content = args.get("content")
+    if not isinstance(path, str) or not isinstance(content, str):
+        raise TypeError(
+            f"write_file 参数类型错误: path={type(path).__name__}, "
+            f"content={type(content).__name__}"
+        )
+    if delay_seconds:
+        time.sleep(delay_seconds)
+    target = (sandbox / path).resolve()
+    if target != sandbox and sandbox not in target.parents:
+        raise ConfigurationError(f"write_file 路径越出沙箱: {path}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8", newline="\n")
+    return {"written": str(Path(path)), "bytes": len(content.encode("utf-8"))}
 
 
 class LocalControlledHost:
@@ -37,32 +61,37 @@ class LocalControlledHost:
     name = "local_controlled"
     # in-tree 测试宿主，无独立包版本；versions.py 会在 null_reasons 说明
     package_version: str | None = None
+    host_commit: str | None = None
 
     def preflight(self, fault: FaultSpec | None) -> None:
-        """注入点预检：不支持的注入显式报错（防假绿）。"""
+        """注入点与进程参数预检：不支持或无法判定的配置显式报错。"""
         if fault is not None and fault.injection_point is InjectionPoint.OBSERVATION:
             raise AdapterCapabilityError(
                 f"宿主 {self.name} 没有独立的 observation 通道，"
                 "不支持 observation 注入；不能静默跳过或假装注入成功。"
             )
-
-    # ------------------------------------------------------------------ tools
-
-    def _write_file(self, args: dict[str, Any], sandbox: Path) -> dict[str, Any]:
-        path = args.get("path")
-        content = args.get("content")
-        # 参数校验：invalid_args 注入的实际表现就是这里抛出的 TypeError
-        if not isinstance(path, str) or not isinstance(content, str):
-            raise TypeError(
-                f"write_file 参数类型错误: path={type(path).__name__}, "
-                f"content={type(content).__name__}"
-            )
-        target = (sandbox / path).resolve()
-        if not str(target).startswith(str(sandbox.resolve())):
-            raise ConfigurationError(f"write_file 路径越出沙箱: {path}")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8", newline="\n")
-        return {"written": str(Path(path)), "bytes": len(content.encode("utf-8"))}
+        if fault is None:
+            return
+        mode = fault.params.get("timeout_mode", "simulated")
+        if mode not in ("simulated", "process"):
+            raise ConfigurationError("timeout_mode 只能是 simulated 或 process")
+        if mode == "process" and (
+            fault.injection_point is not InjectionPoint.TOOL_RESULT
+            or fault.fault_type is not FaultType.TIMEOUT
+        ):
+            raise AdapterCapabilityError("进程硬终止只支持 tool_result / timeout")
+        if mode != "process":
+            return
+        timeout = fault.params.get("timeout_seconds")
+        delay = fault.params.get("tool_delay_seconds")
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+            raise ConfigurationError("进程超时需要数值型 timeout_seconds")
+        if isinstance(delay, bool) or not isinstance(delay, (int, float)):
+            raise ConfigurationError("进程超时需要数值型 tool_delay_seconds")
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ConfigurationError("timeout_seconds 必须是有限正数")
+        if not math.isfinite(delay) or delay < 0:
+            raise ConfigurationError("tool_delay_seconds 必须是有限非负数")
 
     # ------------------------------------------------------------------ run
 
@@ -121,14 +150,65 @@ class LocalControlledHost:
                         # 校验本身就会抛 TypeError，这里显式使用注入构造的异常
                         injected_exception = effect.exception
 
+                process_requested = bool(
+                    fault is not None and fault.params.get("timeout_mode") == "process"
+                )
+                process_timed_out = False
                 try:
                     if injected_exception is not None:
                         raise injected_exception
-                    result = self._write_file(args, sandbox)
+                    if process_requested:
+                        assert fault is not None
+                        try:
+                            result = run_with_process_timeout(
+                                _write_file_tool,
+                                args,
+                                sandbox,
+                                delay_seconds=float(fault.params["tool_delay_seconds"]),
+                                timeout_seconds=float(fault.params["timeout_seconds"]),
+                            )
+                        except ProcessTimeoutError as exc:
+                            process_timed_out = True
+                            injected = True
+                            text = str(fault.params.get("message") or str(exc))
+                            replacement = (
+                                None
+                                if fault.surface_as is SurfaceAs.RAISE_EXCEPTION
+                                else {"error": "timeout", "message": text}
+                            )
+                            events.append(
+                                {
+                                    "kind": "injection",
+                                    "injection_point": fault.injection_point.value,
+                                    "fault_type": fault.fault_type.value,
+                                    "surface_as": fault.surface_as.value,
+                                    "original": None,
+                                    "replacement": replacement,
+                                    "raised": (
+                                        "TimeoutError" if replacement is None else None
+                                    ),
+                                    "applied": True,
+                                    "timeout_mode": "process",
+                                    "timeout_seconds": float(fault.params["timeout_seconds"]),
+                                    "tool_delay_seconds": float(
+                                        fault.params["tool_delay_seconds"]
+                                    ),
+                                    "worker_pid": exc.worker_pid,
+                                    "elapsed_seconds": exc.elapsed_seconds,
+                                    "process_terminated": exc.process_terminated,
+                                }
+                            )
+                            if replacement is None:
+                                # 对宿主保持 TimeoutError 信号；子进程确实已经终止。
+                                raise TimeoutError(text) from exc
+                            result = replacement
+                    else:
+                        result = _write_file_tool(args, sandbox)
 
                     if (
                         fault is not None
                         and fault.injection_point is InjectionPoint.TOOL_RESULT
+                        and not process_requested
                     ):
                         effect = build_fault_effect(
                             fault.fault_type, fault.surface_as, fault.params, original=result
@@ -163,6 +243,23 @@ class LocalControlledHost:
                         )
                         injected = applied
                         result = effect.replacement
+                    elif process_requested and not process_timed_out:
+                        assert fault is not None
+                        # 子进程正常完成就没有发生真实超时，绝不能补一个模拟异常充数。
+                        events.append(
+                            {
+                                "kind": "injection",
+                                "injection_point": fault.injection_point.value,
+                                "fault_type": fault.fault_type.value,
+                                "surface_as": fault.surface_as.value,
+                                "original": result,
+                                "replacement": result,
+                                "raised": None,
+                                "applied": False,
+                                "timeout_mode": "process",
+                                "reason": "timeout_not_reached",
+                            }
+                        )
 
                     events.append(
                         {

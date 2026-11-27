@@ -24,6 +24,10 @@ class HostRunResult:
         framework_outcome: str,
         final_answer: str | None,
         events: list[dict[str, Any]],
+        model_invoked: bool = False,
+        observation_status: str = "not_applicable",
+        model_id: str | None = None,
+        sampling_params: dict[str, Any] | None = None,
     ) -> None:
         if framework_outcome not in ("completed", "failed"):
             raise ValueError(f"非法 framework_outcome: {framework_outcome}")
@@ -32,6 +36,42 @@ class HostRunResult:
         # 结构化事件（tool_call / tool_result / injection 等），由 runner 加上
         # 公共字段后写入 steps.jsonl
         self.events = events
+        self.model_invoked = model_invoked
+        self.observation_status = observation_status
+        self.model_id = model_id
+        self.sampling_params = sampling_params
+
+
+class PostconditionObservation:
+    """宿主在运行结束后对真实业务状态的只读观察。
+
+    适配器必须查询实际状态，不得复述工具返回或最终回答。证据不足时显式设置
+    evidence_sufficient=False，由 runner 交给 Oracle 判为 inconclusive。
+    """
+
+    def __init__(
+        self,
+        *,
+        task_succeeded: bool,
+        side_effects_as_expected: bool,
+        evidence: dict[str, Any],
+        evidence_sufficient: bool = True,
+    ) -> None:
+        self.task_succeeded = task_succeeded
+        self.side_effects_as_expected = side_effects_as_expected
+        self.evidence = evidence
+        self.evidence_sufficient = evidence_sufficient
+
+
+@runtime_checkable
+class StatefulHost(Protocol):
+    """支持 host_state 后置条件的宿主；观察必须与执行路径分开。"""
+
+    def observe_postcondition(
+        self, expected: Any, *, sandbox: Path
+    ) -> PostconditionObservation:
+        """以只读方式核验预注册业务状态，并返回可序列化的安全证据。"""
+        ...
 
 
 @runtime_checkable
@@ -45,6 +85,7 @@ class HostAdapter(Protocol):
 
     name: str
     package_version: str | None  # 宿主包版本；in-tree 宿主为 None 并说明原因
+    host_commit: str | None  # 外部宿主源码 commit；无法获得时为 None 并说明原因
 
     def run_script(
         self,
@@ -54,4 +95,20 @@ class HostAdapter(Protocol):
         sandbox: Path,
     ) -> HostRunResult:
         """执行一段（预设或重建的）模型输出脚本，返回结构化结果。"""
+        ...
+
+
+@runtime_checkable
+class CounterfactualHost(Protocol):
+    """支持 M3 的宿主协议；续跑循环仍由宿主实现，核心不接管 Agent loop。"""
+
+    def run_counterfactual(
+        self,
+        script: list[dict[str, Any]],
+        *,
+        fault: Any,
+        sandbox: Path,
+        model_provider: Any,
+    ) -> HostRunResult:
+        """由真实模型建立匹配脚本契约的前缀，再从注入后的观察续跑。"""
         ...

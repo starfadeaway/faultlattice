@@ -1,6 +1,8 @@
 {
-  "include": ["src/faultlattice", "tests"],
+  "include": ["src/faultlattice", "console/server", "run_all.py", "tests"],
   "exclude": [".venv", "runs", "**/__pycache__"],
   "typeCheckingMode": "basic",
-  "pythonVersion": "3.13"
+  "pythonVersion": "3.13",
+  "venvPath": ".",
+  "venv": ".venv"
 }

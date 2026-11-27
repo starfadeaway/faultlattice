@@ -1,0 +1,30 @@
+# 工具空返回后的 M3 真实模型续跑；源 run 只读。
+task_id: langgraph_m3_empty_continuation
+description: 真实模型先建立匹配预注册契约的工具调用前缀，再读取注入后的空 ToolMessage，保留并回传原始思考字段后续跑。
+host: langgraph
+mode: M3
+counterfactual_source: runs/20261125T081747-97534dc4
+fault:
+  injection_point: tool_result
+  fault_type: empty_response
+  surface_as: return_value
+  params: {empty: {}}
+model:
+  provider: openai_compatible
+  model_id: kimi-k2.5
+  sampling_params: {temperature: 0.0}
+target_layers: [framework, model]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello langgraph empty}
+expected_behavior: 模型应区分真实文件副作用与空工具返回，不得编造返回内容；可明确说明信息不足并停止。单次结果只作定性案例。
+fault_recoverable: true
+allowed_degradation: [模型说明工具返回为空并请求重试, 模型明确说明信息不足并终止]
+oracle:
+  source: rule
+  determinism: deterministic
+  validation: golden_verified
+  description: 框架层读取文件和调用方信号；模型层使用公开规则，且必须实际调用并收到故障观察。
+min_evaluable: 30
+inconclusive_threshold: 0.2
+inconclusive_reporting: 不足 30 次可判定运行或超过阈值时，仅展示原始事件和定性结论。

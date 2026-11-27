@@ -31,7 +31,14 @@ def _git_commit(repo_root: Path) -> str | None:
     return result.stdout.strip() or None
 
 
-def collect_versions(repo_root: Path, *, host_package_version: str | None) -> VersionInfo:
+def collect_versions(
+    repo_root: Path,
+    *,
+    host_package_version: str | None,
+    host_commit: str | None = None,
+    model_id: str | None = None,
+    sampling_params: dict | None = None,
+) -> VersionInfo:
     repo_root = Path(repo_root)
     null_reasons: dict[str, str] = {}
 
@@ -49,19 +56,25 @@ def collect_versions(repo_root: Path, *, host_package_version: str | None) -> Ve
     if host_package_version is None:
         null_reasons["host_package_version"] = "本地受控测试宿主位于仓库内，无独立包版本"
 
-    # M0–M2 不涉及真实模型：model_id / sampling_params 显式为 None
-    null_reasons["model_id"] = "M0–M2 不使用真实模型"
-    null_reasons["sampling_params"] = "M0–M2 不使用真实模型"
-    # in-tree 宿主的源码版本即 faultlattice_commit，不重复登记
-    null_reasons["host_commit"] = "本地受控测试宿主位于仓库内，与 faultlattice_commit 相同"
+    # 无真实模型时显式保留 null；M3 记录运行前冻结的模型与采样参数。
+    if model_id is None:
+        null_reasons["model_id"] = "本次运行不使用真实模型"
+    if sampling_params is None:
+        null_reasons["sampling_params"] = "本次运行不使用真实模型"
+    if host_commit is None:
+        null_reasons["host_commit"] = (
+            "本地受控测试宿主位于仓库内，与 faultlattice_commit 相同"
+            if host_package_version is None
+            else "PyPI 宿主包未提供源码 commit；已记录精确包版本与依赖锁哈希"
+        )
 
     return VersionInfo(
         faultlattice_commit=commit,
         host_package_version=host_package_version,
-        host_commit=None,
+        host_commit=host_commit,
         python_version=sys.version.split()[0],
         dependency_lock_hash=lock_hash,
-        model_id=None,
-        sampling_params=None,
+        model_id=model_id,
+        sampling_params=sampling_params,
         null_reasons=null_reasons,
     )

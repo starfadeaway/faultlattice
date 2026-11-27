@@ -168,8 +168,11 @@ class OracleSpec(BaseModel):
 class ExpectedPostcondition(BaseModel):
     """机器可检查的预期后置条件。
 
-    kind 的取值由 Oracle 判定器解释；第一版支持：
+    kind 的取值由 Oracle 判定器解释：
     - file_written：params = {"path": 相对沙箱路径, "content_contains": 可选子串}
+    - file_absent：params = {"path": 相对沙箱路径}，只证明目标文件不存在
+    - host_state：由实现 StatefulHost 的适配器只读核验真实业务状态；
+      params 必须包含人读 summary，具体观察证据不得包含凭据
     """
 
     model_config = ConfigDict(frozen=True)
@@ -178,12 +181,19 @@ class ExpectedPostcondition(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
-class TaskDefinition(BaseModel):
-    """任务 × 宿主的预注册声明。
+class ModelSpec(BaseModel):
+    """M3 真实模型的预注册配置；凭据只允许来自环境变量。"""
 
-    这里的字段必须在看到实验结果前写入任务定义文件；运行时原样复制进
-    run.json，禁止事后倒填（spec 第 4.1 节）。
-    """
+    model_config = ConfigDict(frozen=True)
+
+    provider: Literal["openai_compatible"]
+    model_id: str = Field(min_length=1)
+    sampling_params: dict[str, Any] = Field(default_factory=dict)
+    reasoning_mode: Literal["default", "enabled", "disabled"] = "default"
+
+
+class TaskDefinition(BaseModel):
+    """任务 × 宿主的预注册声明，运行前冻结并原样复制进 run.json。"""
 
     task_id: str
     description: str = ""
@@ -201,21 +211,29 @@ class TaskDefinition(BaseModel):
     inconclusive_reporting: str = ""
     min_evaluable: int = Field(ge=1)
     pair_id: str | None = None
-    # M0 预设脚本：模型输出的手写序列（仅 M0 使用）。
-    # 元素形如 {"tool_call": {...}} 或 {"final_answer": "..."}。
+    # M0 预设脚本；M3 的实际前缀由 counterfactual_source 的轨迹重建。
     script: list[dict[str, Any]] = Field(default_factory=list)
+    model: ModelSpec | None = None
+    counterfactual_source: str | None = None
 
     @model_validator(mode="after")
-    def _check_layers_match_mode(self) -> TaskDefinition:
-        # spec 第 4.1 节：M0–M2 本地框架实验用 [framework]；
-        # 只有评价真实模型反应的 M3 才加入 model，不能不看模式一律声明两层。
-        if self.mode in (ExecutionMode.M0, ExecutionMode.M1, ExecutionMode.M2) and (
-            TargetLayer.MODEL in self.target_layers
-        ):
-            raise ConfigurationError(
-                f"任务 {self.task_id}: 执行模式 {self.mode} 不产生真实模型反应，"
-                "target_layers 不得包含 model（spec 第 4.1 节）。"
-            )
+    def _check_mode_contract(self) -> TaskDefinition:
+        if self.mode in (ExecutionMode.M0, ExecutionMode.M1, ExecutionMode.M2):
+            if TargetLayer.MODEL in self.target_layers:
+                raise ConfigurationError(
+                    f"任务 {self.task_id}: 执行模式 {self.mode} 不产生真实模型反应，"
+                    "target_layers 不得包含 model（spec 第 4.1 节）。"
+                )
+            if self.model is not None or self.counterfactual_source is not None:
+                raise ConfigurationError("M0–M2 不得声明真实模型或 M3 源轨迹")
+        else:
+            if self.model is None or self.counterfactual_source is None:
+                raise ConfigurationError("M3 必须预注册 model 与 counterfactual_source")
+            if self.fault is None or self.fault.injection_point not in (
+                InjectionPoint.TOOL_RESULT,
+                InjectionPoint.OBSERVATION,
+            ):
+                raise ConfigurationError("M3 只支持 tool_result / observation 故障")
         return self
 
 
@@ -246,6 +264,8 @@ class ModelOutputEvent(EventBase):
     event_type: Literal["model_output"] = "model_output"
     content: str
     preset: bool  # True 表示 M0 预设，非现场生成
+    reasoning_content: str | None = None  # 提供方原始思考字段，供后续工具轮次回传
+    m3_phase: Literal["prefix", "continuation"] | None = None
 
 
 class ToolCallEvent(EventBase):

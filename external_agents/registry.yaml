@@ -1,0 +1,26 @@
+agents:
+- id: reference-agent
+  name: 完整参考 Agent（参数与结果故障）
+  entrypoint: examples/external_agent/reference_agent.py
+  class_name: ReferenceAgent
+  created_at: '2026-11-25T00:00:00Z'
+- id: tool-args-agent
+  name: 参数边界参考 Agent
+  entrypoint: examples/external_agent/reference_agent.py
+  class_name: ToolArgsReferenceAgent
+  created_at: '2026-11-25T00:00:00Z'
+- id: tool-result-agent
+  name: 工具结果参考 Agent
+  entrypoint: examples/external_agent/reference_agent.py
+  class_name: ToolResultReferenceAgent
+  created_at: '2026-11-25T00:00:00Z'
+- id: anchorline
+  name: Anchorline（真实记忆工具）
+  entrypoint: external_agents/drafts/anchorline.py
+  class_name: AnchorlineHostAdapter
+  created_at: '2026-11-26T17:50:15.412663Z'
+- id: lorekeeper
+  name: LoreKeeper（真实 ReAct 与计算器）
+  entrypoint: external_agents/drafts/lorekeeper.py
+  class_name: LoreKeeperHostAdapter
+  created_at: '2026-11-26T18:05:15.885333Z'

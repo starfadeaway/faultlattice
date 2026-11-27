@@ -1,0 +1,43 @@
+# 一键实验套件登记：任务与预期在运行前冻结，套件版本变更需同步记录原因。
+suites:
+  - id: framework-m0
+    name: 多宿主框架故障基线
+    version: 2
+    description: 顺序执行 11 个 M0 任务，覆盖本地、smolagents 与 LangGraph 的参数、工具返回和模型观察故障。
+    tasks:
+      - tasks/local_write.yaml
+      - tasks/smolagents_args_error.yaml
+      - tasks/smolagents_write.yaml
+      - tasks/smolagents_write_exception.yaml
+      - tasks/smolagents_observation_error.yaml
+      - tasks/langgraph_args_error.yaml
+      - tasks/langgraph_write.yaml
+      - tasks/langgraph_write_exception.yaml
+      - tasks/langgraph_write_empty.yaml
+      - tasks/langgraph_observation_error.yaml
+      - tasks/langgraph_observation_malformed.yaml
+
+  - id: process-timeout
+    name: 本地同步工具真实硬超时
+    version: 1
+    description: 在独立 spawn 子进程中执行写入工具，到达真实时钟期限后终止并回收进程；核对 TimeoutError、进程证据与超时后无文件副作用。
+    tasks:
+      - tasks/local_hard_timeout.yaml
+
+  - id: langgraph-m3
+    name: LangGraph 真实模型反事实续跑
+    version: 3
+    description: 执行 4 个预注册 M3 场景；真实模型建立目标前缀并回传原始思考字段，覆盖工具错误、空返回和观察损坏。
+    tasks:
+      - tasks/langgraph_m3.yaml
+      - tasks/langgraph_m3_empty_continuation.yaml
+      - tasks/langgraph_m3_observation_error.yaml
+      - tasks/langgraph_m3_observation_malformed.yaml
+
+  - id: smolagents-m3
+    name: smolagents 真实模型反事实续跑
+    version: 1
+    description: 执行 2 个预注册 M3 场景；真实 ToolCallingAgent 建立目标前缀，覆盖工具错误返回与观察损坏，并保留结构化工具调用和思考字段。
+    tasks:
+      - tasks/smolagents_m3.yaml
+      - tasks/smolagents_m3_observation_error.yaml

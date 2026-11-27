@@ -1,0 +1,30 @@
+# LangGraph 观察错误 M0；运行前冻结预期。
+task_id: langgraph_observation_error
+description: ToolNode 真实写入后，只把下一轮模型节点收到的 ToolMessage 内容替换为错误文本。
+host: langgraph
+mode: M0
+fault:
+  injection_point: observation
+  fault_type: error_response
+  surface_as: not_applicable
+  params: {message: simulated corrupted observation}
+script:
+  - tool_call:
+      name: write_file
+      args: {path: output/hello.txt, content: "hello langgraph observation\n"}
+  - final_answer: 已写入 output/hello.txt。
+target_layers: [framework]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello langgraph observation}
+expected_behavior: 保留真实文件和原始工具结果，只改变模型观察；M0 的预设最终回答不代表真实模型反应。
+fault_recoverable: true
+allowed_degradation: [记录观察替换并按预设脚本结束]
+oracle:
+  source: state
+  determinism: deterministic
+  validation: golden_verified
+  description: 检查文件、工具结果、观察注入与图最终信号；真实模型行为留待 M3 评价。
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 证据不足超过阈值时只报告原始数量与覆盖率。

@@ -1,0 +1,32 @@
+# smolagents 参数故障 M0；运行前冻结预期。
+task_id: smolagents_args_error
+description: 真实 ToolCallingAgent 调用 write_file；在参数校验前把 path 改成整数，检查宿主的失败传播。
+host: smolagents
+mode: M0
+fault:
+  injection_point: tool_args
+  fault_type: invalid_args
+  surface_as: raise_exception
+  params:
+    corrupt_args: {path: 123}
+    message: invalid tool arguments (simulated)
+script:
+  - tool_call:
+      name: write_file
+      args: {path: output/hello.txt, content: "hello smolagents args\n"}
+  - final_answer: 已写入 output/hello.txt。
+target_layers: [framework]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello smolagents args}
+expected_behavior: 参数校验应在写入前拒绝非法 path，文件不得写入；框架应向调用方显式报告失败。
+fault_recoverable: true
+allowed_degradation: [框架记录参数错误并终止本次任务]
+oracle:
+  source: state
+  determinism: deterministic
+  validation: golden_verified
+  description: 联合检查沙箱文件状态、实际参数异常和调用方最终信号；M0 不评价真实模型。
+min_evaluable: 1
+inconclusive_threshold: 0.5
+inconclusive_reporting: 证据不足超过阈值时只报告原始数量与覆盖率。
