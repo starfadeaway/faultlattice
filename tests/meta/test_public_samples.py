@@ -3,6 +3,7 @@
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
+import yaml
 
 from faultlattice.batch import validate_ab_tasks, verify_batch_report
 from faultlattice.report import verify_report
@@ -92,3 +93,16 @@ def test_anchorline_surface_pair_is_frozen_and_not_deduplicated() -> None:
     fact_ids = {item.evidence["fact_id"] for item in judgements}
     assert len(fact_ids) == 2
     assert all(item.evidence["task_succeeded"] for item in judgements)
+
+
+def test_console_external_gate_covers_every_baseline_run() -> None:
+    manifest = yaml.safe_load((REPO_ROOT / "project.manifest.yaml").read_text(encoding="utf-8"))
+    baseline = yaml.safe_load(
+        (REPO_ROOT / "quality" / "external-agent-m0.yaml").read_text(encoding="utf-8")
+    )
+    command = manifest["checks"]["external-quality-gate"]["command"]
+    baseline_option = command.index("--baseline")
+
+    assert command[:2] == ["faultlattice", "quality-gate"]
+    assert command[2:baseline_option] == baseline["runs"]
+    assert command[baseline_option + 1] == "quality/external-agent-m0.yaml"
