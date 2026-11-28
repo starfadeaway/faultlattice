@@ -233,10 +233,12 @@ class ProjectService:
                 "host": None,
                 "mode": None,
                 "created_at": None,
+                "execution_status": "completed",
                 "error": None,
             }
             try:
                 data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                harness_error = data.get("harness_error") or {}
                 item.update(
                     run_id=data.get("run_id", run_dir.name),
                     task_id=data.get("task", {}).get("task_id"),
@@ -245,6 +247,13 @@ class ProjectService:
                     host=data.get("task", {}).get("host"),
                     mode=data.get("task", {}).get("mode"),
                     created_at=data.get("created_at"),
+                    execution_status=data.get("execution_status", "completed"),
+                    error=(
+                        f"{harness_error.get('type', 'HarnessError')}: "
+                        f"{harness_error.get('message', '未记录错误详情')}"
+                        if data.get("execution_status") == "harness_failed"
+                        else None
+                    ),
                 )
             except (OSError, json.JSONDecodeError) as exc:
                 # 单个损坏产物只在自己的行内显示错误，不影响其他实验入口。

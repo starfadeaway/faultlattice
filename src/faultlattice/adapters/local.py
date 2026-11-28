@@ -103,11 +103,13 @@ class LocalControlledHost:
         fault: FaultSpec | None = None,
         sandbox: Path,
     ) -> HostRunResult:
+        # 在预检前重置，早期失败也不能误带上一次运行的事件。
+        events: list[dict[str, Any]] = []
+        self.last_events = events
         sandbox = Path(sandbox)
         sandbox.mkdir(parents=True, exist_ok=True)
         self.preflight(fault)
 
-        events: list[dict[str, Any]] = []
         final_answer: str | None = None
         framework_outcome = "completed"
 

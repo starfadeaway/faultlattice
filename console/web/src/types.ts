@@ -53,6 +53,7 @@ export interface Artifact {
   host: string | null
   mode: string | null
   created_at: string | null
+  execution_status: "completed" | "harness_failed"
   error: string | null
 }
 

@@ -576,13 +576,15 @@ class SmolagentsHost:
         sandbox: Path,
         provider: ModelProvider | None,
     ) -> HostRunResult:
+        # 在预检前重置，早期失败也不能误带上一次运行的事件。
+        events: list[dict[str, Any]] = []
+        self.last_events = events
         sandbox = Path(sandbox).resolve()
         sandbox.mkdir(parents=True, exist_ok=True)
         self.preflight(fault)
         if not script:
             raise ConfigurationError("smolagents 执行脚本不能为空")
 
-        events: list[dict[str, Any]] = []
         model: PresetScriptModel | StructuredLiveModel
         if provider is None:
             model = PresetScriptModel(script, events)

@@ -429,6 +429,12 @@ class ExperimentService:
             except Exception as exc:
                 # 后台边界必须把错误呈现给用户，不能让线程静默终止后一直显示 running。
                 failed += 1
+                if run_dir is None:
+                    failed_run_id = getattr(exc, "run_id", None)
+                    if isinstance(failed_run_id, str):
+                        candidate = self.root / "runs" / failed_run_id
+                        if (candidate / "run.json").is_file():
+                            run_dir = candidate
                 update: dict[str, Any] = {
                     "status": "failed",
                     "error": f"{type(exc).__name__}: {exc}",

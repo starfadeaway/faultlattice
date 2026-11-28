@@ -242,6 +242,7 @@ class TaskDefinition(BaseModel):
             unambiguous_failures = {
                 FaultType.TIMEOUT,
                 FaultType.EMPTY_RESPONSE,
+                FaultType.TRUNCATED,
                 FaultType.MALFORMED_CONTENT,
                 FaultType.ERROR_RESPONSE,
             }
@@ -250,8 +251,9 @@ class TaskDefinition(BaseModel):
                 and self.fault.fault_type in unambiguous_failures
             ):
                 raise ConfigurationError(
-                    f"任务 {self.task_id}: {self.fault.fault_type.value} 故障明确要求模型声明 failure，"
-                    "不得预注册 expected_state_claim=success；如研究恢复后成功，请另建具备充分成功证据的任务"
+                    f"任务 {self.task_id}: 当前 Schema 不支持在 "
+                    f"{self.fault.fault_type.value} 故障下预注册 expected_state_claim=success；"
+                    "恢复类实验须先新增并验证显式恢复证据契约，不能仅靠同一故障类型放开 success"
                 )
         return self
 
@@ -392,3 +394,6 @@ class RunManifest(BaseModel):
     # 新运行写入原始轨迹哈希；None 仅表示历史产物没有可回溯校验的哈希。
     steps_sha256: str | None = None
     oracle_sha256: str | None = None
+    # Harness 异常保留原始事件与失败清单，但不伪造 Oracle 或完整四件套。
+    execution_status: Literal["completed", "harness_failed"] = "completed"
+    harness_error: dict[str, str] | None = None

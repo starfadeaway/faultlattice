@@ -171,7 +171,11 @@ export function ArtifactsView({ artifacts }: { artifacts: Artifact[] }) {
               <div><span>执行宿主</span><strong>{artifact.host ? hostLabels[artifact.host] || artifact.host : "宿主未知"}</strong></div>
               <div><span>执行模式</span><strong>{artifact.mode ? modeLabels[artifact.mode] || artifact.mode : "模式未知"}</strong></div>
               <div><span>运行时间</span><strong>{formatDate(artifact.created_at)}</strong></div>
-              <Tag color={artifact.complete ? "success" : "warning"}>{artifact.complete ? "四个核心文件齐全（4/4）" : `核心文件缺失（${artifact.files.length}/4）`}</Tag>
+              <Tag color={artifact.execution_status === "harness_failed" ? "error" : artifact.complete ? "success" : "warning"}>
+                {artifact.execution_status === "harness_failed"
+                  ? `Harness 失败 · 已保留审计产物（${artifact.files.length}/4）`
+                  : artifact.complete ? "四个核心文件齐全（4/4）" : `核心文件缺失（${artifact.files.length}/4）`}
+              </Tag>
               <ul className="artifact-files" aria-label="四个核心产物文件">
                 {artifactFileLabels.map((file) => {
                   const exists = artifact.files.includes(file.name)

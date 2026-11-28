@@ -110,8 +110,8 @@ uv run pytest tests/meta/test_public_samples.py -q
 
 - 每个坐标只有一次运行，不能比较模型优劣、计算稳定失败率或宣称协议长期可靠。
 - 本轮后已增加换行标记变体的解析回归测试，并在调用前统一推荐标准 JSON 围栏；兼容只影响未来执行，不回改本轮三个 `inconclusive` 或公开样例。
-- 本轮后已在两种宿主中前置禁止额外工具调用：LangGraph 续跑不提供工具，smolagents 续跑只提供 `final_answer`；违规调用在执行前阻断并留痕。该修改尚需新的冻结真实模型运行验证，不能宣称已消除本轮记录的副作用。
-- smolagents 普通文本最终回答导致的 Harness 错误需要评估如何保留失败四件套；在完成前保持执行错误与 Agent verdict 分离。
+- 本轮后已在两种宿主中前置禁止额外工具调用：LangGraph 续跑不提供工具，smolagents 续跑只提供 `final_answer`；违规调用在执行前阻断并留痕。**Post-fix note：** 该修改已由[首轮易错点契约 M3 三模型重跑](2026-11-28-m3-precall-contract-rerun.md)的 18 个新冻结坐标验证；第二批没有额外写入同时受续跑工具边界结构性约束，不能解释为模型自行学会不重试，也不能宣称已消除其它条件下的副作用。
+- smolagents 普通文本最终回答导致的 Harness 错误需要保留失败审计产物，并继续保持执行错误与 Agent verdict 分离；不为了凑齐四件套伪造 Oracle 判定。
 - 额外工具重试、探针文件等副作用尚未进入独立 Oracle 维度。
 - 本轮未重新验收 MySQL、embedding、LanceDB 或浏览器逐控件行为，与本次 M3 结果无关。
 - 未向模型或宿主上游提交 issue／PR；当前证据首先用于 FaultLattice 协议和适配器改进。

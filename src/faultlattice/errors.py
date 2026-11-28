@@ -13,7 +13,13 @@ from __future__ import annotations
 
 
 class FaultLatticeError(Exception):
-    """所有 Harness 自身错误的基类。"""
+    """所有 Harness 自身错误的基类。
+
+    宿主执行失败后，runner 写入 run_id，供控制台加载已保留的失败轨迹；
+    配置在运行创建前被拒绝时保持 None。
+    """
+
+    run_id: str | None = None
 
 
 class ConfigurationError(FaultLatticeError):

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from faultlattice.errors import ConfigurationError, TraceFormatError
+from faultlattice.errors import ConfigurationError, FaultLatticeError, TraceFormatError
 from faultlattice.host import (
     CounterfactualHost,
     HostAdapter,
@@ -190,6 +190,9 @@ def _model_rule_evidence(
     if claim_blocks > 1:
         parse_error = "multiple_state_claims"
     empty = not answer.strip()
+    if parse_error is None and state_claim is None and claim_blocks == 0:
+        # 区分“没有回答”和“有回答但没有可识别声明”；不回改历史产物中的 null。
+        parse_error = "empty_final_answer" if empty else "state_claim_not_found"
     sufficient = not empty and state_claim in {"success", "failure"}
     success_without_support = state_claim == "success" and not task_succeeded
     evidence = ModelEvidence(
@@ -241,25 +244,6 @@ def execute_run(
     run_dir = Path(runs_root) / run_id
     sandbox = run_dir / "sandbox"
     writer = TraceWriter(run_dir)
-
-    # --- 执行宿主（含故障注入） ---
-    if task.mode.value == "M3":
-        if model_provider is None or not isinstance(host, CounterfactualHost):
-            raise ConfigurationError("M3 需要真实 ModelProvider 与支持反事实续跑的宿主")
-        if task.fault is None:
-            raise ConfigurationError("M3 缺少故障声明")
-        result = host.run_counterfactual(
-            script_override or task.script,
-            fault=task.fault,
-            sandbox=sandbox,
-            model_provider=model_provider,
-        )
-    else:
-        if model_provider is not None:
-            raise ConfigurationError("M0–M2 不得调用真实模型")
-        result = host.run_script(task.script, fault=task.fault, sandbox=sandbox)
-
-    # --- 记录 steps.jsonl ---
     seq = 0
 
     def _emit(event: dict) -> None:
@@ -284,6 +268,92 @@ def execute_run(
             record["event_type"] = "injection"
         writer.append_step_dict(record)
 
+    # --- 执行宿主（含故障注入）；异常边界也要保留已收集的原始事件 ---
+    try:
+        if task.mode.value == "M3":
+            if model_provider is None or not isinstance(host, CounterfactualHost):
+                raise ConfigurationError("M3 需要真实 ModelProvider 与支持反事实续跑的宿主")
+            if task.fault is None:
+                raise ConfigurationError("M3 缺少故障声明")
+            result = host.run_counterfactual(
+                script_override or task.script,
+                fault=task.fault,
+                sandbox=sandbox,
+                model_provider=model_provider,
+            )
+        else:
+            if model_provider is not None:
+                raise ConfigurationError("M0–M2 不得调用真实模型")
+            result = host.run_script(task.script, fault=task.fault, sandbox=sandbox)
+    except Exception as exc:
+        if isinstance(exc, FaultLatticeError):
+            exc.run_id = run_id
+        events = list(getattr(host, "last_events", []))
+        try:
+            _emit({"kind": "task_start", "task_id": task.task_id})
+            for event in events:
+                _emit(event)
+            _emit(
+                {
+                    "kind": "run_end",
+                    "event_type": "run_end",
+                    "framework_outcome": "failed",
+                    "final_answer": None,
+                    "harness_error_type": type(exc).__name__,
+                    "harness_error_message": str(exc),
+                }
+            )
+            injection_events = [event for event in events if event.get("kind") == "injection"]
+            resolved_run_dir = run_dir.resolve()
+            try:
+                run_dir_display = resolved_run_dir.relative_to(Path(repo_root).resolve()).as_posix()
+            except ValueError:
+                run_dir_display = run_id
+            from faultlattice.canonical import sha256_hex
+
+            failed_manifest = RunManifest(
+                run_id=run_id,
+                created_at=datetime.now(UTC),
+                task=task,
+                versions=collect_versions(
+                    repo_root,
+                    host_package_version=host.package_version,
+                    host_commit=getattr(host, "host_commit", None),
+                    model_id=model_provider.model_id if model_provider is not None else None,
+                    sampling_params=(
+                        dict(model_provider.sampling_params)
+                        if model_provider is not None
+                        else None
+                    ),
+                ),
+                injection_applied=(
+                    task.fault is not None
+                    and bool(injection_events)
+                    and all(event.get("applied") for event in injection_events)
+                ),
+                observation_status=(
+                    ObservationStatus.UNKNOWN
+                    if task.mode.value == "M3"
+                    else ObservationStatus.NOT_APPLICABLE
+                ),
+                model_invoked=any(
+                    event.get("kind") == "model_output" and event.get("preset") is False
+                    for event in events
+                ),
+                manual_expectations=manual_expectations or [],
+                run_dir=run_dir_display,
+                steps_sha256=sha256_hex((run_dir / "steps.jsonl").read_bytes()),
+                oracle_sha256=None,
+                execution_status="harness_failed",
+                harness_error={"type": type(exc).__name__, "message": str(exc)},
+            )
+            writer.write_run_json(failed_manifest)
+        except Exception as artifact_exc:
+            # 保留原始 Harness 异常类型；失败产物自身的问题作为附加上下文暴露。
+            exc.add_note(f"失败产物写入也发生错误: {type(artifact_exc).__name__}: {artifact_exc}")
+        raise
+
+    # --- 成功返回后记录 steps.jsonl ---
     _emit({"kind": "task_start", "task_id": task.task_id})
     for event in result.events:
         _emit(event)
