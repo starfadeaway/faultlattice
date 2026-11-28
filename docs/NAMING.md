@@ -375,7 +375,8 @@ B = tool_result × error_response × raise_exception
 - 监测子页面：`/map`（项目地图）、`/modules`（模块与代码）、`/checks`（测试状态）、`/naming`（命名登记）、`/artifacts`（实验产物）。
 - 实验页显示预注册内容、当前任务、进度、事件时间线和 Oracle 判定；同一工作区同时只运行一个套件，刷新后可恢复历史。`/experiments?batch=<batch_id>` 用于从接入页或分析页定位运行。
 - 分析页按批次、任务、宿主、来源与 Oracle 层级聚合真实历史，提供带动效和悬浮提示的判定构成、批次趋势、任务风险图表，以及基于固定规则生成的中文数据结论。规则结论只描述当前样本，不把相关性写成因果，不把 Harness 完成写成 Agent 通过。
-- 命名文档、单次运行 `report.md`、套件 `report.md`、分析结果、LLM 建议、LLM 跨批次分析以及公开验收报告都提供 Markdown 本地下载；下载不修改原始产物。实验产物页的“公开验收报告”只显示 `reports/README.md` 已登记且实际存在的 `reports/external/*.md`。
+- 分析页的“实验判定 / 参数差异”是两个独立只读工作区。参数差异来自 `reports/external/evidence/` 中 `faultlattice.prefix-diagnostic-evidence-v1` 脱敏证据，接口为 `GET /api/analysis/parameter-diffs`；后端重新核对目标与实际调用，不按报告文字生成 Oracle。差异类型为 `exact_match` / `missing_trailing_newline` / `literal_backslash_n` / `extra_quotes_and_literal_backslash_n` / `native_tool_shape_error` / `request_error` / `other_argument_mismatch`。界面显示可见 LF、反斜杠、引号、目标与实际参数及 JSON 代码，不执行工具、不自动修参、不混入完整运行统计。
+- 命名文档、单次运行 `report.md`、套件 `report.md`、分析结果、参数差异筛选结果、LLM 建议、LLM 跨批次分析以及公开验收报告都提供 Markdown 本地下载；下载不修改原始产物。实验产物页的“公开验收报告”只显示 `reports/README.md` 已登记且实际存在的 `reports/external/*.md`。
 - 设置项合并为“外观与阅读”“实验与导航”“环境与偏好诊断”三组，包括 `dark / light` 主题、自定义强调色、`system / on / off` 动效、`comfortable / compact` 密度、代码字号、`local / utc` 时间、默认首页、默认对话模型、实验完成通知、完成后自动定位结果、运行刷新间隔、页面空闲预加载、回顶按钮显示、代码自动换行和高对比度。它们只改变本机展示、默认选择与通知行为，不改变任务、已冻结模型、Oracle 或原始产物。长文本页面的“回到顶端”使用固定 48×48 像素的正圆按钮。
 - 偏好可导出为 `product=FaultLattice`、`schema=1` 的 JSON；导入时逐项完整校验，不执行文件内容，也不导入 API 密钥或实验状态。浏览器存储键为 `faultlattice-theme`、`faultlattice-accent`、`faultlattice-motion`、`faultlattice-code-font-size`、`faultlattice-time-display`、`faultlattice-density`、`faultlattice-default-page`、`faultlattice.advisor-option`、`faultlattice-completion-notifications`、`faultlattice-auto-scroll-results`、`faultlattice-refresh-interval`、`faultlattice-preload-pages`、`faultlattice-show-back-to-top`、`faultlattice-code-wrap`、`faultlattice-high-contrast`。
 

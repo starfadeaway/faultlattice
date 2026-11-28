@@ -86,10 +86,11 @@ uv run pytest tests/meta/test_public_samples.py -q
 - 首轮易错点契约真实 M3 重跑仍是：18/18 完成并生成四件套，18 个模型层均为 `explicit_failure`，0 个 Harness 错误；18 个单次公开副本复算通过，3 份模型聚合报告为本地非公开审计产物。
 - 三个独立判断 Harness 失败已另建单次后续实验：DeepSeek / smolagents 与 MiniMax / LangGraph 错误观察坐标完成并复算，MiniMax / LangGraph 空返回仍删除目标末尾换行，在写入前严格拒绝。smolagents 现在对非原生 `final_answer` 立即记录明确协议错误，不进入异常记忆；适配器不自动补参或把 DSML 文本伪装成工具调用。详见 `reports/external/2026-11-29-harness-failure-followup.md`。
 - MiniMax 换行专项已执行 24 次首轮无工具诊断：简化文本现行提示 12/12 精确匹配，原空返回提示 4/4 删除末尾换行，原观察错误提示 3/4 精确匹配、1/4 写成字面 `\n`；新增字面量自校验提示 2/4 偏离，因此不合入。严格前缀拒绝与历史结论保持不变，详见 `reports/external/2026-11-29-minimax-newline-diagnostics.md`。
-- 最新完整测试：374 passed（包含新增 2 个公开样例复算）。
+- 分析页新增“参数差异”工作区：后端只读复算公开诊断证据，前端支持模型／条件／差异／阶段筛选、目标与实际参数逐字符对照、LF／字面反斜杠／引号高亮、完整 JSON 展开和当前筛选 Markdown 下载。该视图不执行工具、不自动修参，也不计入 Oracle 或完整 M3 运行统计。
+- 最新完整测试：377 passed（包含参数差异服务的差异复算、坏文件隔离和真实公开 API 计数测试）。
 - Ruff：通过；Pyright：0 errors、0 warnings、0 informations。
 - 公开样例现有 76 个单次四件套和 4 个历史公开批次；独立判断试点新增 15 个完整运行，后续实验新增 2 个，未改写既有真实模型结果。公开行为回归门禁通过。
-- 研发视图 ESLint、TypeScript 与生产构建通过，保留既存大 chunk 提示。本轮未重启服务或进行逐控件浏览器测试，不外推为完整交互覆盖。
+- 研发视图 ESLint、TypeScript 与生产构建通过，保留既存大 chunk 提示。浏览器已实际验证参数筛选、三类字符差异、字段切换、JSON 展开、筛选报告内容、原分析图表恢复和明暗主题；375／768／1024／1440 布局无整页横向溢出，干净加载后的交互无捕获错误，参数证据 API 请求均为 200。
 - 历史新契约 M3 补跑仍保持 14 个完成、11 个 `explicit_failure`、3 个 `inconclusive`、4 个 Harness 错误，未因新结果回改；当时已经丢失的错误轨迹不由新代码伪造补齐。
 - 私有历史派生报告迁移基线仍为 95/95 完整四件套复算通过；63 份只重渲染派生正文，原始三件产物与 verdict 未改。
 - 确定性本地行为门禁使用当前代码现场生成 independent current；输出写入 `runs/_quality/`，不修改跟踪报告。

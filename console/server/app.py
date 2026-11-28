@@ -20,6 +20,7 @@ from console.server.authoring import (
     TaskDraftRequest,
     TextFileUploadRequest,
 )
+from console.server.diagnostics import ParameterDiffService
 from console.server.experiments import AnalysisRequest, ExperimentService
 from console.server.external_agents import ExternalAgentService
 from console.server.service import ProjectService
@@ -35,6 +36,7 @@ load_env(ROOT / ".env")
 
 service = ProjectService(ROOT)
 experiment_service = ExperimentService(ROOT)
+parameter_diff_service = ParameterDiffService(ROOT)
 external_agent_service = ExternalAgentService(ROOT)
 task_authoring_service = TaskAuthoringService(ROOT, external_agent_service)
 ai_authoring_service = AIAuthoringService(ROOT, task_authoring_service)
@@ -170,6 +172,11 @@ def experiment_models() -> list[dict]:
 @app.get("/api/experiments/history")
 def experiment_history() -> list[dict]:
     return experiment_service.history()
+
+
+@app.get("/api/analysis/parameter-diffs")
+def parameter_diffs() -> dict:
+    return parameter_diff_service.list()
 
 
 @app.post("/api/experiments/analysis")

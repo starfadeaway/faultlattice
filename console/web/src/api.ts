@@ -1,4 +1,4 @@
-import type { AdapterDraftResult, AdviceResult, AnalysisResult, Artifact, CustomTask, ExperimentSuite, ExternalAgent, ModelOption, ProjectSnapshot, PublicReport, SaveAdapterDraftResult, SuiteRun, TaskDraft, TaskPackResult } from "./types"
+import type { AdapterDraftResult, AdviceResult, AnalysisResult, Artifact, CustomTask, ExperimentSuite, ExternalAgent, ModelOption, ParameterDiffResponse, ProjectSnapshot, PublicReport, SaveAdapterDraftResult, SuiteRun, TaskDraft, TaskPackResult } from "./types"
 
 async function responseError(response: Response, fallback: string): Promise<Error> {
   try {
@@ -46,6 +46,7 @@ export const api = {
   experimentSuites: () => request<ExperimentSuite[]>("/api/experiments/suites"),
   experimentModels: () => request<ModelOption[]>("/api/experiments/models"),
   experimentHistory: () => request<SuiteRun[]>("/api/experiments/history"),
+  parameterDiffs: () => request<ParameterDiffResponse>("/api/analysis/parameter-diffs"),
   experimentDetail: (batchId: string) =>
     request<SuiteRun>(`/api/experiments/history/${encodeURIComponent(batchId)}`),
   runSuite: (suiteId: string, modelOptionId?: string) =>

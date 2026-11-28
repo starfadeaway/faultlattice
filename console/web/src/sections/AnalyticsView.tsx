@@ -4,13 +4,14 @@ import {
   ArrowRightOutlined,
   BarChartOutlined,
   CheckCircleOutlined,
+  DiffOutlined,
   DownloadOutlined,
   InfoCircleOutlined,
   ReloadOutlined,
   RobotOutlined,
   SearchOutlined,
 } from "@ant-design/icons"
-import { Alert, Button, Empty, Input, Select, Spin, Tag } from "antd"
+import { Alert, Button, Empty, Input, Segmented, Select, Spin, Tag } from "antd"
 import ReactMarkdown from "react-markdown"
 import { useNavigate } from "react-router"
 import remarkGfm from "remark-gfm"
@@ -32,6 +33,7 @@ import {
 } from "recharts"
 import { api } from "../api"
 import { MarkdownDownloadButton } from "../components/MarkdownDownloadButton"
+import { ParameterDiffView } from "./ParameterDiffView"
 import type { AnalysisResult, ModelOption, SuiteRun } from "../types"
 import { downloadMarkdown } from "../utils/downloadMarkdown"
 import { formatDateTime } from "../utils/dateTime"
@@ -167,7 +169,37 @@ function llmDocument(analysis: ScopedAnalysis): string {
   ].join("\n")
 }
 
-export function AnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, motionEnabled }: AnalyticsViewProps) {
+export function AnalyticsView(props: AnalyticsViewProps) {
+  const [workspace, setWorkspace] = useState<"verdicts" | "parameters">("verdicts")
+  const parameters = workspace === "parameters"
+  return (
+    <div className="view-stack analytics-view">
+      <section className="analysis-intro">
+        <div>
+          <span className="section-kicker">{parameters ? "PARAMETER FIDELITY" : "EVIDENCE ANALYSIS"}</span>
+          <h2>{parameters ? "工具参数差异诊断" : "跨批次实验分析"}</h2>
+          <p>{parameters
+            ? "对照目标与实际工具参数，定位真实换行、字面转义和额外引号；只读展示公开诊断，不执行工具或修改 Oracle。"
+            : "用真实历史生成动态图表和可复算结论；也可以让所选模型解释聚合结果。所有分析都不重新运行实验、不修改 Oracle。"}</p>
+        </div>
+        {parameters ? <DiffOutlined aria-hidden="true" /> : <BarChartOutlined aria-hidden="true" />}
+      </section>
+      <Segmented
+        className="analysis-workspace-switch"
+        value={workspace}
+        onChange={(value) => setWorkspace(value as "verdicts" | "parameters")}
+        aria-label="选择分析工作区"
+        options={[
+          { value: "verdicts", label: "实验判定" },
+          { value: "parameters", label: "参数差异" },
+        ]}
+      />
+      {parameters ? <ParameterDiffView motionEnabled={props.motionEnabled} /> : <VerdictAnalyticsView {...props} />}
+    </div>
+  )
+}
+
+function VerdictAnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, motionEnabled }: AnalyticsViewProps) {
   const [history, setHistory] = useState<SuiteRun[]>([])
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [advisorOptionId, setAdvisorOptionId] = useState(defaultAdvisorOptionId)
@@ -474,16 +506,7 @@ export function AnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, m
   }
 
   return (
-    <div className="view-stack analytics-view">
-      <section className="analysis-intro">
-        <div>
-          <span className="section-kicker">EVIDENCE ANALYSIS</span>
-          <h2>跨批次实验分析</h2>
-          <p>用真实历史生成动态图表和可复算结论；也可以让所选模型解释聚合结果。所有分析都不重新运行实验、不修改 Oracle。</p>
-        </div>
-        <BarChartOutlined aria-hidden="true" />
-      </section>
-
+    <div className="view-stack analytics-subview">
       <section className="analysis-panel analysis-filters" aria-label="分析筛选">
         <Input
           allowClear

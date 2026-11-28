@@ -259,3 +259,54 @@ export interface SaveAdapterDraftResult {
   warnings: string[]
   message: string
 }
+
+export type ParameterDifferenceType =
+  | "exact_match"
+  | "missing_trailing_newline"
+  | "literal_backslash_n"
+  | "extra_quotes_and_literal_backslash_n"
+  | "native_tool_shape_error"
+  | "request_error"
+  | "other_argument_mismatch"
+
+export interface ParameterToolCall {
+  name: string
+  args: Record<string, unknown>
+}
+
+export interface ParameterDiffRecord {
+  id: string
+  source_path: string
+  source_commit: string
+  model_id: string
+  sampling_params: Record<string, unknown>
+  stage_id: string
+  design: string
+  coordinate: string
+  condition_id: string
+  condition_purpose: string
+  repetition: number
+  request_status: "completed" | "request_error"
+  classification: ParameterDifferenceType
+  difference_type: ParameterDifferenceType
+  prompt_sha256: string
+  finish_reason: string | null
+  expected_tool_call: ParameterToolCall
+  actual_tool_calls: ParameterToolCall[]
+  changed_fields: string[]
+}
+
+export interface ParameterDiffDataset {
+  path: string
+  sha256: string
+  source_commit: string
+  model_id: string
+  sampling_params: Record<string, unknown>
+  records: number
+}
+
+export interface ParameterDiffResponse {
+  datasets: ParameterDiffDataset[]
+  records: ParameterDiffRecord[]
+  warnings: string[]
+}
