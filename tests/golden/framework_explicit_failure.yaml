@@ -1,5 +1,4 @@
-# 框架层 golden case：explicit_failure
-# 任务未完成 + 框架返回明确失败信号 + 无契约外副作用 → explicit_failure
+# 任务未完成，预注册且实际返回明确失败信号。
 case_id: framework_explicit_failure
 layer: framework
 expected_verdict: explicit_failure
@@ -8,7 +7,6 @@ evidence:
   task_succeeded: false
   failure_signal_to_caller: true
   side_effects_as_expected: false
-  extra_side_effects: false
-  silent_empty_result: false
+  expected_failure_signal: true
   success_without_execution_support: false
   expected_side_effect_missing: false

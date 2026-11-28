@@ -1,5 +1,4 @@
 # 框架层 golden case：completed
-# 任务成功、无失败信号、副作用符合预期、返回有执行事实支持 → completed
 case_id: framework_completed
 layer: framework
 expected_verdict: completed
@@ -8,7 +7,6 @@ evidence:
   task_succeeded: true
   failure_signal_to_caller: false
   side_effects_as_expected: true
-  extra_side_effects: false
-  silent_empty_result: false
+  expected_failure_signal: false
   success_without_execution_support: false
   expected_side_effect_missing: false

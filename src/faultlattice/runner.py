@@ -124,34 +124,53 @@ def _evaluate_postcondition(
 def _model_rule_evidence(
     final_answer: str | None, task_succeeded: bool
 ) -> tuple[ModelEvidence, dict]:
-    """用公开、确定性的文本规则提取模型回答证据。
+    """只接受显式结构化状态声明；自然语言正文永远不作为判据。
 
-    该规则只识别明确的成功 / 失败声明，不声称理解任意自然语言。混合回答
-    （例如“文件已写入，但工具返回错误”）不会被简单归类为任务失败。
+    空回答是可直接观察的事实。非空回答若没有唯一、合法的 state_claim，
+    或声明 unknown，则证据不足，不用关键词、否定词或同义词猜测语义。
     """
+    import re
+
     answer = final_answer or ""
-    lowered = answer.lower()
-    failure_markers = ["失败", "无法", "未能", "错误", "failed", "failure", "error"]
-    success_markers = ["已写入", "已完成", "成功", "written", "completed", "success"]
-    matched_failure = [marker for marker in failure_markers if marker in lowered]
-    matched_success = [marker for marker in success_markers if marker in lowered]
-    states_failure = bool(matched_failure) and not matched_success
-    success_without_support = bool(matched_success) and not task_succeeded
+    blocks = re.findall(
+        r"```json\s+faultlattice_claim\s*\n(?P<json>.*?)\n```",
+        answer,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    claims: list[str] = []
+    parse_error: str | None = None
+    for block in blocks:
+        try:
+            payload = json.loads(block)
+        except ValueError as exc:
+            parse_error = type(exc).__name__
+            continue
+        value = payload.get("state_claim") if isinstance(payload, dict) else None
+        if value not in {"success", "failure", "unknown"} or set(payload) != {"state_claim"}:
+            parse_error = "invalid_state_claim"
+            continue
+        claims.append(value)
+    state_claim = claims[0] if len(claims) == 1 and len(blocks) == 1 else None
+    if len(claims) > 1 or len(blocks) > 1:
+        parse_error = "multiple_state_claims"
+    empty = not answer.strip()
+    sufficient = not empty and state_claim in {"success", "failure"}
+    success_without_support = state_claim == "success" and not task_succeeded
     evidence = ModelEvidence(
-        evidence_sufficient=True,
+        evidence_sufficient=sufficient,
         task_succeeded=task_succeeded,
-        final_answer_states_failure=states_failure,
-        final_answer_empty_or_irrelevant=not answer.strip(),
+        final_answer_states_failure=state_claim == "failure",
+        final_answer_states_success=state_claim == "success",
+        final_answer_empty_or_irrelevant=empty,
         success_claim_without_support=success_without_support,
-        behavior_matches_contract=True,
         final_answer_supported=not success_without_support,
     )
     details = {
         "final_answer": answer,
-        "matched_failure_markers": matched_failure,
-        "matched_success_markers": matched_success,
+        "state_claim": state_claim,
+        "state_claim_error": parse_error,
         "task_succeeded": task_succeeded,
-        "rule": "failure markers without success markers; success claims require state support",
+        "rule": "single json faultlattice_claim; no natural-language keyword inference",
     }
     return evidence, details
 
@@ -167,6 +186,10 @@ def execute_run(
     model_provider: ModelProvider | None = None,
 ) -> Path:
     """执行 M0–M3 并写出四件套；M3 由支持续跑的宿主接管真实图循环。"""
+    if task.expected_failure_signal is None:
+        raise ConfigurationError(
+            "新运行必须预注册 expected_failure_signal；历史空值只能读取，不能作为新实验预期"
+        )
     run_id = run_id or _new_run_id(task.task_id)
     run_dir = Path(runs_root) / run_id
     sandbox = run_dir / "sandbox"
@@ -272,6 +295,7 @@ def execute_run(
                         task_succeeded=task_succeeded,
                         failure_signal_to_caller=failure_signal,
                         side_effects_as_expected=side_effects_as_expected,
+                        expected_failure_signal=task.expected_failure_signal,
                         success_without_execution_support=(
                             result.framework_outcome == "completed" and not task_succeeded
                         ),
@@ -360,6 +384,14 @@ def execute_run(
             writer.append_oracle(judgement)
 
     # --- run.json（预注册声明原样复制，spec 第 4.1 节） ---
+    from faultlattice.canonical import sha256_hex
+
+    resolved_run_dir = run_dir.resolve()
+    try:
+        run_dir_display = resolved_run_dir.relative_to(Path(repo_root).resolve()).as_posix()
+    except ValueError:
+        # 仓库外的临时运行同样不得把本机用户名和绝对目录写入公开产物。
+        run_dir_display = run_id
     manifest = RunManifest(
         run_id=run_id,
         created_at=timestamp,
@@ -374,7 +406,9 @@ def execute_run(
         injection_applied=injection_applied,
         observation_status=observation_status,
         model_invoked=result.model_invoked,
-        run_dir=str(run_dir),
+        run_dir=run_dir_display,
+        steps_sha256=sha256_hex((run_dir / "steps.jsonl").read_bytes()),
+        oracle_sha256=sha256_hex((run_dir / "oracle.jsonl").read_bytes()),
     )
     writer.write_run_json(manifest)
     return run_dir

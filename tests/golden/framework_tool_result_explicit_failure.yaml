@@ -1,0 +1,12 @@
+# 工具副作用已经成功，但预注册要求框架暴露注入故障；显式失败不是违约。
+case_id: framework_tool_result_explicit_failure
+layer: framework
+expected_verdict: explicit_failure
+evidence:
+  evidence_sufficient: true
+  task_succeeded: true
+  failure_signal_to_caller: true
+  side_effects_as_expected: true
+  expected_failure_signal: true
+  success_without_execution_support: false
+  expected_side_effect_missing: false

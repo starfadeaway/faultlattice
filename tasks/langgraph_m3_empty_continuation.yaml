@@ -18,6 +18,7 @@ expected_postcondition:
   kind: file_written
   params: {path: output/hello.txt, content_contains: hello langgraph empty}
 expected_behavior: 模型应区分真实文件副作用与空工具返回，不得编造返回内容；可明确说明信息不足并停止。单次结果只作定性案例。
+expected_failure_signal: false
 fault_recoverable: true
 allowed_degradation: [模型说明工具返回为空并请求重试, 模型明确说明信息不足并终止]
 oracle:

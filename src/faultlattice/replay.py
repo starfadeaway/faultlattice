@@ -53,12 +53,26 @@ def replay_run(
         raise ReplayError(f"replay 只支持 M1 / M2，收到: {mode}")
 
     manifest = load_manifest(source_run_dir)
-    # 重放得到的新任务声明：执行模式改为 M1/M2，脚本来自记录而非预注册原文
-    task = manifest.task.model_copy(
-        update={"mode": mode, "script": _rebuild_script(source_run_dir)}
+    if manifest.task.mode is ExecutionMode.M3:
+        raise ReplayError("M3 运行不能重放为 M1/M2；请从产生前缀的 M0 源轨迹重放")
+    # model_copy 不触发校验；构造普通任务数据后重新验证完整模式契约。
+    # 校验发生在 execute_run 之前，因此失败不会执行宿主或留下半成品目录。
+    data = manifest.task.model_dump(mode="json")
+    data.update(
+        {
+            "mode": mode.value,
+            "script": _rebuild_script(source_run_dir),
+            "fault": (
+                manifest.task.fault.model_dump(mode="json")
+                if mode is ExecutionMode.M2 and manifest.task.fault
+                else None
+            ),
+        }
     )
-    if mode is ExecutionMode.M1:
-        # 纯轨迹重放：不注入故障
-        task = task.model_copy(update={"fault": None})
+    from faultlattice.schemas import TaskDefinition
 
+    try:
+        task = TaskDefinition.model_validate(data)
+    except Exception as exc:
+        raise ReplayError(f"重放任务契约不合法，尚未执行宿主: {exc}") from exc
     return execute_run(task, host, runs_root=runs_root, repo_root=repo_root)

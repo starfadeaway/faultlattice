@@ -1,5 +1,4 @@
-# 模型层 golden case：explicit_failure
-# 任务未完成 + 最终回答向用户明确表达失败 → explicit_failure
+# 任务未完成，结构化声明明确表达 failure。
 case_id: model_explicit_failure
 layer: model
 expected_verdict: explicit_failure
@@ -7,7 +6,7 @@ evidence:
   evidence_sufficient: true
   task_succeeded: false
   final_answer_states_failure: true
+  final_answer_states_success: false
   final_answer_empty_or_irrelevant: false
   success_claim_without_support: false
-  behavior_matches_contract: true
   final_answer_supported: true

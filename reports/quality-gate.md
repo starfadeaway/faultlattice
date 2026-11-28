@@ -15,7 +15,7 @@
 
 | 任务 | 宿主 | 模式 | 故障族 | 注入点 | 故障类型 | 呈现方式 | 运行数 B/C | 注入失败 B/C | 层 | 可判定 B/C | 无故障判定 B/C | 最低样本 | 比例结论状态 |
 |---|---|---|---|---|---|---|---:|---:|---|---:|---|---:|---|
-| local_write | local_controlled | M0 | tool_fault | tool_args | invalid_args | raise_exception | 1/1 | 0/0 | framework | 1/1 | N/A / N/A | 1 | eligible_descriptive_rate |
+| local_write | local_controlled | M0 | tool_fault | tool_args | invalid_args | raise_exception | 1/1 | 0/0 | framework | 1/1 | N/A / N/A | 3 | below_min_evaluable |
 
 
 ## 违规项
@@ -24,5 +24,5 @@
 
 
 ```json faultlattice-quality-gate
-{"baseline_name":"public-local-write-m0","baseline_runs":1,"comparisons":[{"baseline_injection_failures":0,"baseline_no_fault_verdicts":[],"baseline_runs":1,"coordinate":{"experiment_family":"tool_fault","fault_type":"invalid_args","host":"local_controlled","injection_point":"tool_args","mode":"M0","surface_as":"raise_exception","task_id":"local_write"},"current_injection_failures":0,"current_no_fault_verdicts":[],"current_runs":1,"layers":[{"baseline_contract_violations":0,"baseline_evaluable":1,"baseline_silent_failures":0,"current_contract_violations":0,"current_evaluable":1,"current_silent_failures":0,"layer":"framework","min_evaluable":1,"rate_stability":"eligible_descriptive_rate"}]}],"current_runs":1,"matched_coordinates":1,"passed":true,"schema_version":1,"violations":[]}
+{"baseline_name":"public-local-write-m0","baseline_runs":1,"comparisons":[{"baseline_injection_failures":0,"baseline_no_fault_verdicts":[],"baseline_runs":1,"coordinate":{"experiment_family":"tool_fault","fault_type":"invalid_args","host":"local_controlled","injection_point":"tool_args","mode":"M0","model_id":null,"reasoning_mode":null,"surface_as":"raise_exception","task_id":"local_write"},"current_injection_failures":0,"current_no_fault_verdicts":[],"current_runs":1,"layers":[{"baseline_contract_violations":0,"baseline_evaluable":1,"baseline_silent_failures":0,"current_contract_violations":0,"current_evaluable":1,"current_silent_failures":0,"layer":"framework","min_evaluable":3,"rate_stability":"below_min_evaluable"}]}],"current_runs":1,"matched_coordinates":1,"passed":true,"schema_version":1,"violations":[]}
 ```

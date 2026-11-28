@@ -6,6 +6,7 @@ runs/*
 # 本地凭据、上传资料、临时验收文件与外部项目源码副本
 .env
 external_agents/uploads/
+external_agents/drafts/
 .verify/
 external_projects/
 

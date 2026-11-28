@@ -1,7 +1,7 @@
 """报告生成与指标复算（spec 第 6、7 节）。
 
-- report 只读取原始产物（run.json / oracle.jsonl）生成报告；
-- verify 独立重算指标，与 report.md 内嵌的 metrics 块逐字节比较，
+- report 只读取原始产物生成报告；
+- verify 校验事件 Schema、新产物的原始文件哈希、metrics 块与完整正文，
   不读取生成报告时的内存中间态；
 - 报告正文用 Jinja2 渲染，数字全部来自 compute_metrics 的真实计算；
 - 可判定运行数为 0 或低于 min_evaluable 时，沉默失败率为 None，
@@ -110,6 +110,10 @@ REPORT_TEMPLATE = Template(
 {%- endif %}
 
 **不要把这些概念混为一谈：** 业务任务完成与否、框架返回成功还是失败、Harness 是否完成执行，是三件不同的事。本报告的 Oracle 判定不是“整个 Agent 测试通过”的徽章。
+
+{% if legacy_contract_warning -%}
+> **旧口径警示：** {{ legacy_contract_warning }}
+{% endif %}
 
 ## 一、这次测试做了什么
 
@@ -376,7 +380,7 @@ def _layer_metrics(
             )
         silent = int(judgement.verdict in (FrameworkVerdict.SILENT_FAILURE, ModelVerdict.SILENT_FAILURE))
 
-    if evaluable == 0 or evaluable < task.min_evaluable:
+    if evaluable == 0 or evaluable < max(3, task.min_evaluable):
         rate: float | None = None
     else:
         rate = silent / evaluable
@@ -801,6 +805,19 @@ def render_report(run_dir: Path) -> str:
     judgements = load_judgements(run_dir)
     injection_boundary, observation_boundary, model_boundary = _boundary_text(manifest)
     headline, outcome_summary = _outcome_summary(manifest, judgements)
+    legacy_warnings = []
+    if task.expected_failure_signal is None:
+        legacy_warnings.append(
+            "该历史运行没有机器可判定的 expected_failure_signal，框架层 verdict 仅按旧口径保留，不能用于新契约下的行为比较"
+        )
+    if any(
+        item.layer is TargetLayer.MODEL and "state_claim" not in item.evidence
+        for item in judgements
+    ):
+        legacy_warnings.append(
+            "模型层 verdict 来自旧版自然语言关键词规则，是否定句与混合表述均可能误判；它不是已验证的模型行为结论，需按结构化 state_claim 契约重新实验"
+        )
+    legacy_contract_warning = "；".join(legacy_warnings)
 
     def _view(layer_metrics: dict[str, Any]) -> dict[str, Any]:
         # 单次运行只展示原始计数；机器指标不改动，verify 仍按原始锚点复算。
@@ -847,6 +864,7 @@ def render_report(run_dir: Path) -> str:
         injection_applied_label="是" if manifest.injection_applied else "否",
         headline=headline,
         outcome_summary=outcome_summary,
+        legacy_contract_warning=legacy_contract_warning,
         final_answer_heading=(
             "真实模型最终回答（自述）" if manifest.model_invoked else "预设最终回答（非真实模型输出）"
         ),
@@ -906,24 +924,47 @@ def generate_report(run_dir: Path) -> Path:
 
 
 def verify_report(run_dir: Path) -> list[str]:
-    """独立重算指标并与 report.md 内嵌 metrics 块比较。"""
+    """校验轨迹 Schema、可选原始哈希、指标锚点和完整人读正文。"""
+    from pydantic import TypeAdapter, ValidationError
+
+    from faultlattice.canonical import sha256_hex
+    from faultlattice.schemas import StepEvent
+
     run_dir = Path(run_dir)
     problems: list[str] = []
+    try:
+        manifest = load_manifest(run_dir)
+        for name, expected_hash in (
+            ("steps.jsonl", manifest.steps_sha256),
+            ("oracle.jsonl", manifest.oracle_sha256),
+        ):
+            if expected_hash is not None:
+                actual_hash = sha256_hex((run_dir / name).read_bytes())
+                if actual_hash != expected_hash:
+                    problems.append(f"{name} 哈希与 run.json 中冻结的值不一致")
+        for line_number, record in enumerate(read_jsonl(run_dir / "steps.jsonl"), start=1):
+            try:
+                TypeAdapter(StepEvent).validate_python(record)
+            except ValidationError as exc:
+                problems.append(f"steps.jsonl 第 {line_number} 行不符合 Schema: {exc}")
+    except Exception as exc:
+        problems.append(f"原始产物完整性校验失败: {type(exc).__name__}: {exc}")
 
     report_path = run_dir / REPORT_MD
     if not report_path.is_file():
-        return [f"report.md 不存在: {report_path}"]
-
+        return [f"report.md 不存在: {report_path}", *problems]
     text = report_path.read_text(encoding="utf-8")
     match = _METRICS_BLOCK_RE.search(text)
     if match is None:
-        return ["report.md 中找不到 ```json faultlattice-metrics 指标块"]
+        return ["report.md 中找不到 ```json faultlattice-metrics 指标块", *problems]
 
     expected = canonical_dumps(compute_metrics(run_dir))
     actual = match.group("json")
     if actual != expected:
-        problems.append(
-            "report.md 指标与独立重算结果不一致：\n"
-            f"  报告内嵌: {actual}\n  独立重算: {expected}"
-        )
+        problems.append("report.md 指标与独立重算结果不一致")
+    expected_text = render_report(run_dir)
+    if not expected_text.endswith("\n"):
+        expected_text += "\n"
+    if text != expected_text:
+        problems.append("report.md 正文与当前原始产物重渲染结果不一致；请用 report 命令重新生成")
     return problems

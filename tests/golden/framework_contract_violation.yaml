@@ -1,5 +1,4 @@
-# 框架层 golden case：contract_violation
-# 任务实际成功，但框架向调用方返回了失败信号 → contract_violation
+# 预注册正常完成，实际却向调用方报告失败。
 case_id: framework_contract_violation
 layer: framework
 expected_verdict: contract_violation
@@ -8,7 +7,6 @@ evidence:
   task_succeeded: true
   failure_signal_to_caller: true
   side_effects_as_expected: true
-  extra_side_effects: false
-  silent_empty_result: false
+  expected_failure_signal: false
   success_without_execution_support: false
   expected_side_effect_missing: false

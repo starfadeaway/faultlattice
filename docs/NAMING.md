@@ -206,7 +206,15 @@ Oracle 是把实际证据转换为判定的规则或评审来源。元数据用�
 
 `oracle.description` 必须用可读语言说明判定依据。`evidence` 保存本次实际证据，例如文件是否存在、内容是否匹配、最终信号是什么；不能只保存结论而丢掉证据。
 
-确定性规则不等于万能自然语言理解。当前模型层公开规则只识别明确的成功／失败标记和状态事实；混合或含混回答可能保持证据不足，不能为了降低 N/A 而强行分类。
+确定性规则不等于万能自然语言理解。新模型层实验只读取最终回答中唯一的 ` ```json faultlattice_claim ` 块，其 `state_claim` 取 `success` / `failure` / `unknown`。没有结构化声明、JSON 非法、多个声明或 `unknown` 均为证据不足；不得再用“错误”“成功”等自然语言关键词猜测。旧版关键词 verdict 仅保留作历史审计。
+
+### `expected_failure_signal`
+
+布尔值，运行前随任务预注册冻结，表示在当前故障和业务后置条件下，框架是否应向调用方返回明确失败信号。它把 `expected_behavior` 中的信号要求变成机器判据：要求失败且实际报失败是 `explicit_failure`，要求失败却正常完成是 `silent_failure`，要求正常完成却报失败是 `contract_violation`。工具已产生真实副作用并不自动意味着框架报失败就是违约。旧 run.json 没有该字段时按历史口径展示，不回填为预先存在。
+
+### `state_claim`
+
+模型在最终回答末尾给出的机器可读声明，只允许 `success`、`failure`、`unknown`。它是模型自述，不替代文件系统或业务状态后置观察；声明成功但独立状态不支持时仍是 `silent_failure`。
 
 ## 6. 产物文件（每次运行的四件套）
 
@@ -259,7 +267,7 @@ JSONL 表示每行一个完整 JSON 对象，便于逐事件追加和逐步查�
 
 禁止编造 commit、版本或模型 ID。`null` 是明确的事实表达，不是需要被隐藏的错误。
 
-所有结构化产物采用 canonical JSON 约定，保证键顺序、时间和编码可复算。`faultlattice verify <run_dir>` 从原始产物独立重算指标，并逐字比较 `report.md` 中的 ` ```json faultlattice-metrics ` 块。扩充人读文字不得改变这个机器锚点。
+所有结构化产物采用 canonical JSON 约定，保证键顺序、时间和编码可复算。新运行的 `run.json` 冻结 `steps_sha256` 与 `oracle_sha256`；`faultlattice verify <run_dir>` 校验这两个原始文件哈希、逐步事件 Schema、指标块以及完整 `report.md` 正文。历史空哈希只表示旧产物缺乏回溯保护，不得在事后补写成原始事实。`batch-verify` 同样比较完整批次正文，而不是只看机器锚点。
 
 ## 8. 异常类型
 

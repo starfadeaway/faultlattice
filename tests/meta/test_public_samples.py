@@ -95,14 +95,29 @@ def test_anchorline_surface_pair_is_frozen_and_not_deduplicated() -> None:
     assert all(item.evidence["task_succeeded"] for item in judgements)
 
 
-def test_console_external_gate_covers_every_baseline_run() -> None:
+def test_console_external_check_is_integrity_verification_not_self_comparison() -> None:
     manifest = yaml.safe_load((REPO_ROOT / "project.manifest.yaml").read_text(encoding="utf-8"))
-    baseline = yaml.safe_load(
-        (REPO_ROOT / "quality" / "external-agent-m0.yaml").read_text(encoding="utf-8")
-    )
     command = manifest["checks"]["external-quality-gate"]["command"]
-    baseline_option = command.index("--baseline")
 
-    assert command[:2] == ["faultlattice", "quality-gate"]
-    assert command[2:baseline_option] == baseline["runs"]
-    assert command[baseline_option + 1] == "quality/external-agent-m0.yaml"
+    assert command == ["python", "-m", "pytest", "tests/meta/test_public_samples.py", "-q"]
+    assert "完整性" in manifest["checks"]["external-quality-gate"]["name"]
+    assert "quality-gate" not in command
+
+
+def test_console_public_gate_generates_independent_current() -> None:
+    manifest = yaml.safe_load((REPO_ROOT / "project.manifest.yaml").read_text(encoding="utf-8"))
+    command = manifest["checks"]["quality-gate"]["command"]
+
+    assert command[:2] == ["python", "scripts/check_public_regression.py"]
+    assert "runs/_sample/" not in " ".join(command[:2])
+    assert (REPO_ROOT / command[1]).is_file()
+
+
+def test_public_report_index_has_no_dead_links() -> None:
+    index = (REPO_ROOT / "reports" / "README.md").read_text(encoding="utf-8")
+    rows = [line for line in index.splitlines() if line.startswith("| 2026-")]
+    assert rows
+    for row in rows:
+        target = row.rsplit("](", 1)[1].split(")", 1)[0]
+        assert target.startswith("external/")
+        assert (REPO_ROOT / "reports" / target).is_file(), f"报告索引死链: {target}"

@@ -1,5 +1,4 @@
-# 模型层 golden case：contract_violation
-# 任务实际成功，但最终回答声称失败 → contract_violation
+# 任务实际成功，但结构化声明为 failure。
 case_id: model_contract_violation
 layer: model
 expected_verdict: contract_violation
@@ -7,7 +6,7 @@ evidence:
   evidence_sufficient: true
   task_succeeded: true
   final_answer_states_failure: true
+  final_answer_states_success: false
   final_answer_empty_or_irrelevant: false
   success_claim_without_support: false
-  behavior_matches_contract: true
   final_answer_supported: true

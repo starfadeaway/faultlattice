@@ -22,6 +22,7 @@ expected_postcondition:
 expected_behavior: >-
   工具必须在真实时钟期限后被硬终止，框架向调用方报告明确失败；等待原阻塞时长后，
   目标文件仍不得出现，以证明子进程没有继续执行。进程提前完成则属于注入未生效。
+expected_failure_signal: true
 fault_recoverable: true
 allowed_degradation:
   - 框架明确报告 TimeoutError 并停止后续最终回答

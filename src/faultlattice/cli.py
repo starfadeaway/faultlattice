@@ -78,16 +78,26 @@ def _model_for(task):
 
     if task.model is None:
         raise ConfigurationError("M3 任务缺少 model 预注册")
-    api_key = os.environ.get("FAULTLATTICE_MODEL_API_KEY", "").strip()
+    # CLI 与研发视图使用同一模型目录；只能按预注册 model_id 精确匹配，不能换模型。
+    from console.server.models import discover_model_options
+
+    option = next(
+        (item for item in discover_model_options() if item.model_id == task.model.model_id),
+        None,
+    )
+    api_key = option.api_key if option else os.environ.get("FAULTLATTICE_MODEL_API_KEY", "").strip()
+    base_url = (
+        option.base_url
+        if option
+        else os.environ.get("FAULTLATTICE_MODEL_BASE_URL", "").strip() or None
+    )
     if not api_key:
-        raise ConfigurationError("M3 需要环境变量 FAULTLATTICE_MODEL_API_KEY")
+        raise ConfigurationError(
+            f"M3 需要模型 {task.model.model_id} 的完整 LLM 目录项或兼容默认凭据"
+        )
     from faultlattice.adapters.openai_model import OpenAICompatibleModel
 
-    return OpenAICompatibleModel(
-        task.model,
-        api_key=api_key,
-        base_url=os.environ.get("FAULTLATTICE_MODEL_BASE_URL") or None,
-    )
+    return OpenAICompatibleModel(task.model, api_key=api_key, base_url=base_url)
 
 
 def _handle_errors(func, *args, **kwargs):
@@ -103,15 +113,31 @@ def _handle_errors(func, *args, **kwargs):
 def run(
     task_file: Annotated[Path, typer.Argument(help="预注册任务定义文件（YAML）。")],
     runs_root: Annotated[Path, typer.Option(help="运行产物根目录。")] = Path("runs"),
+    agent_id: Annotated[
+        str | None, typer.Option(help="host=external 时使用的已登记接入标识。")
+    ] = None,
 ) -> None:
     """执行 M0 预注册实验或从源轨迹执行 M3 反事实续跑。"""
     from faultlattice.counterfactual import CounterfactualRunner
+    from faultlattice.errors import ConfigurationError
     from faultlattice.report import generate_report
     from faultlattice.runner import execute_run, load_task
 
     def _go() -> Path:
+        _load_local_env()
         task = load_task(task_file)
-        host = _host_for(task.host)
+        if task.host == "external":
+            if not agent_id:
+                raise ConfigurationError("外部任务必须显式提供 --agent-id 并通过登记预检")
+            from console.server.external_agents import ExternalAgentService
+
+            try:
+                task_path = task_file.resolve().relative_to(_repo_root()).as_posix()
+            except ValueError as exc:
+                raise ConfigurationError("外部任务文件必须位于项目根目录内") from exc
+            host, task, _ = ExternalAgentService(_repo_root()).binding(agent_id, task_path)
+        else:
+            host = _host_for(task.host)
         if task.mode is ExecutionMode.M3:
             run_dir = CounterfactualRunner(
                 host,

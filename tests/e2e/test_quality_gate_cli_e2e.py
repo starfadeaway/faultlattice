@@ -2,13 +2,14 @@
 
 from pathlib import Path
 
+import yaml
 from typer.testing import CliRunner
 
 from faultlattice.cli import app
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SAMPLE = REPO_ROOT / "runs" / "_sample" / "20261124T124335-94ebab0a"
 BASELINE = REPO_ROOT / "quality" / "public-sample.yaml"
+SAMPLE = REPO_ROOT / yaml.safe_load(BASELINE.read_text(encoding="utf-8"))["runs"][0]
 
 
 def test_quality_gate_public_sample_cli(tmp_path: Path) -> None:

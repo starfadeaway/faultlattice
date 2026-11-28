@@ -27,6 +27,10 @@ from faultlattice.schemas import ExecutionMode, ModelSpec, TargetLayer, TaskDefi
 _TASK_ID = re.compile(r"^[a-z][a-z0-9-]{1,79}$")
 _AGENT_ID = re.compile(r"^[a-z][a-z0-9-]{1,49}$")
 _ALLOWED_SOURCE_SUFFIXES = {".md", ".txt", ".py", ".yaml", ".yml", ".json", ".toml"}
+# 发给外部模型的资料默认只有说明与源码；通用配置、密钥和本地运行产物不进入上下文。
+_AI_SOURCE_SUFFIXES = {".md", ".txt", ".py"}
+_AI_ALLOWED_CONFIG_NAMES = {"pyproject.toml", "package.json"}
+_SENSITIVE_NAME_MARKERS = ("secret", "credential", "password", "passwd", "token", "api_key", "apikey")
 _MAX_SOURCE_FILES = 6
 _MAX_FILE_CHARACTERS = 10_000
 _MAX_TOTAL_CHARACTERS = 30_000
@@ -198,7 +202,10 @@ def inspect_adapter_source(content: str, expected_class: str | None = None) -> d
     for required in ("run_script", "preflight"):
         if required not in methods:
             warnings.append(f"当前类未直接实现 {required}；若依赖继承，登记预检仍会核对真实协议")
-    dangerous = {"eval", "exec", "compile", "__import__", "system", "popen", "Popen"}
+    dangerous = {
+        "eval", "exec", "compile", "__import__", "system", "popen", "Popen",
+        "run", "rmtree", "import_module", "getattr", "remove", "unlink",
+    }
     hits = sorted(
         {
             node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id
@@ -209,7 +216,7 @@ def inspect_adapter_source(content: str, expected_class: str | None = None) -> d
         }
     )
     if hits:
-        warnings.append("发现需人工复核的动态执行或进程调用：" + "、".join(hits))
+        warnings.append("发现需人工复核的高风险动态执行、进程或文件调用：" + "、".join(hits))
     if not selected.bases:
         warnings.append("适配器类没有基类；必须自行完整实现 HostAdapter 协议")
     return {"class_name": selected.name, "warnings": warnings}
@@ -222,12 +229,8 @@ class TaskAuthoringService:
         self.custom_root = self.root / "tasks" / "custom"
 
     def _agent(self, agent_id: str) -> dict[str, Any]:
-        selected = next((item for item in self.external_agents.list() if item["id"] == agent_id), None)
-        if selected is None:
-            raise ConfigurationError(f"未知外部 Agent: {agent_id}")
-        if selected["status"] != "ready" or not selected.get("capabilities"):
-            raise ConfigurationError("外部 Agent 尚未通过预检，不能生成或保存任务")
-        return selected
+        # 创建任务或请求 AI 草案是显式动作，只预检当前选择的宿主。
+        return self.external_agents.preflight(agent_id)
 
     @staticmethod
     def _fault(kind: str, path_argument: str) -> dict[str, Any] | None:
@@ -285,6 +288,12 @@ class TaskAuthoringService:
                 "params": {"path": file_path, "content_contains": draft.content_contains},
             },
             "expected_behavior": draft.expected_behavior.strip(),
+            # 故障任务要求显式失败；无故障基线要求正常完成。
+            "expected_failure_signal": (
+                fault is not None
+                and fault["injection_point"] != "observation"
+                and fault["fault_type"] != "empty_response"
+            ),
             "fault_recoverable": True,
             "allowed_degradation": ["宿主记录故障并向调用方返回明确失败信号"],
             "oracle": {
@@ -338,6 +347,8 @@ class TaskAuthoringService:
             raise ConfigurationError(f"任务草案字段不合法: {exc}") from exc
         agent = self._agent(agent_id)
         path, _ = self._write(draft, agent)
+        # 创建前的预检缓存不包含新任务；显式刷新当前宿主，列表仍不执行适配器。
+        self.external_agents.preflight(agent_id)
         return {"path": path, "task": self._task(draft, agent).model_dump(mode="json")}
 
     def import_draft(self, request: TextFileUploadRequest) -> dict[str, Any]:
@@ -497,6 +508,8 @@ class TaskAuthoringService:
         for draft in drafts:
             path, was_created = self._write(draft, agent, skip_existing=True)
             (created if was_created else skipped).append(path)
+        if created:
+            self.external_agents.preflight(agent_id)
         return {"created": created, "skipped": skipped, "total_compatible": len(drafts)}
 
     def list_custom(self) -> list[dict[str, Any]]:
@@ -545,6 +558,8 @@ class TaskAuthoringService:
             path.unlink()
         except OSError as exc:
             raise ConfigurationError(f"自定义任务删除失败: {exc}") from exc
+        # 删除后任何宿主的旧兼容任务列表都已失效；下次显式预检再重算。
+        self.external_agents.invalidate_inspections()
 
 
 class AIAuthoringService:
@@ -609,6 +624,18 @@ class AIAuthoringService:
         for raw_path in paths:
             path = _safe_relative_file(self.root, raw_path, suffixes=_ALLOWED_SOURCE_SUFFIXES)
             relative = path.relative_to(self.root).as_posix()
+            lowered_name = path.name.lower()
+            if any(marker in lowered_name for marker in _SENSITIVE_NAME_MARKERS):
+                raise ConfigurationError(f"疑似凭据或敏感配置不得发送给模型: {relative}")
+            if any(part in {".git", ".venv", "node_modules", "runs", ".verify"} for part in path.parts):
+                raise ConfigurationError(f"依赖、运行产物或校验临时区不得作为 AI 资料: {relative}")
+            if (
+                path.suffix.lower() not in _AI_SOURCE_SUFFIXES
+                and lowered_name not in _AI_ALLOWED_CONFIG_NAMES
+            ):
+                raise ConfigurationError(
+                    f"AI 资料默认只接受 Markdown、文本、Python 或显式项目清单: {relative}"
+                )
             try:
                 text = path.read_text(encoding="utf-8")
             except UnicodeDecodeError as exc:
@@ -680,6 +707,8 @@ class AIAuthoringService:
         if not _AGENT_ID.fullmatch(request.agent_id):
             raise ConfigurationError("接入标识需为 2–50 位小写字母、数字或连字符，并以字母开头")
         inspection = inspect_adapter_source(request.content, request.class_name)
+        if any("高风险" in warning for warning in inspection["warnings"]):
+            raise ConfigurationError("草案包含高风险调用，未保存；请移除后重新生成或人工改写")
         path = self.root / "external_agents" / "drafts" / f"{request.agent_id}.py"
         if path.exists():
             raise ConfigurationError("草案文件已存在；为避免覆盖人工修改，请更换接入标识")

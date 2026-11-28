@@ -16,6 +16,9 @@
 
 **不要把这些概念混为一谈：** 业务任务完成与否、框架返回成功还是失败、Harness 是否完成执行，是三件不同的事。本报告的 Oracle 判定不是“整个 Agent 测试通过”的徽章。
 
+> **旧口径警示：** 该历史运行没有机器可判定的 expected_failure_signal，框架层 verdict 仅按旧口径保留，不能用于新契约下的行为比较
+
+
 ## 一、这次测试做了什么
 
 | 项目 | 内容 |
@@ -213,7 +216,7 @@
 下方 JSON 不是实验结论正文，而是机器复算锚点；`faultlattice verify` 会从原始产物独立重算并逐字比较，不受上方说明文字影响。
 
 ```json faultlattice-metrics
-{"framework":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":0.0,"silent_failure_rate_display":"0.00%","silent_failures":0,"total_runs":1,"verdict":"contract_violation"},"model":null,"run_id":"20261126T175052-1730a492","task_id":"anchorline-memory-result-error"}
+{"framework":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":null,"silent_failure_rate_display":"N/A","silent_failures":0,"total_runs":1,"verdict":"contract_violation"},"model":null,"run_id":"20261126T175052-1730a492","task_id":"anchorline-memory-result-error"}
 ```
 
 </details>

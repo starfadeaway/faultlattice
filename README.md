@@ -37,7 +37,7 @@ uv run python run_all.py
 
 ## 外部 Agent 接入
 
-“接入”页面向实现 `HostAdapter` 的本地 Python 宿主，不是普通聊天模型端点，也不是任意黑盒程序的自动包装器。参考适配器位于 `examples/external_agent/reference_agent.py`，三个不同能力边界的实例默认登记在 `external_agents/registry.yaml`。
+“接入”页面向实现 `HostAdapter` 的本地 Python 宿主，不是普通聊天模型端点，也不是任意黑盒程序的自动包装器。参考适配器位于 `examples/external_agent/reference_agent.py`；`external_agents/registry.yaml` 当前登记五个实例，其中三个预置实例具有不同能力边界，另两个为已完成本机验收的外部项目快照。
 
 接入页提供“完整参考循环”“参数边界”“工具结果”三种模板和“自定义适配器”参考样式。`ReferenceAgent` 支持 `tool_args` 与 `tool_result`；`ToolArgsReferenceAgent` 只支持参数注入；`ToolResultReferenceAgent` 只支持工具结果注入。下拉模板只填写可编辑字段，不会自动登记或启动实验；自定义样式使用统一的高亮代码块展示最小类结构，生产接入仍应实现自己的真实 `run_script(...)`。登记、任务创作与已登记宿主位于三个子页面，切换时保留未提交表单；三个预置宿主均可打开与模块页一致的 Python 分色、行号源码抽屉。
 
@@ -91,7 +91,7 @@ uv run faultlattice run tasks/langgraph_m3.yaml
 
 - 核心 schema（Pydantic v2）：FaultSpec 合法组合校验、任务预注册、轨迹事件、Oracle 判定记录、run.json 运行清单；
 - 故障模型：13 种合法组合（spec 第 3 节），非法组合直接报配置错误；
-- Oracle 判定器：框架层 / 模型层判定树，配 10 个 golden cases 与元测试；
+- Oracle 判定器：框架层按预注册 `expected_failure_signal` 判定，模型层读取唯一结构化 `state_claim`；配 11 个 golden cases 与元测试；
 - canonical JSON（排序键 / UTF-8 / LF / 禁 NaN）、SHA-256、原子写入，双平台测试；
 - CLI 纵向切片：`run` / `replay`（M1 纯轨迹、M2 故障注入）/ `report` / `verify`；
 - M3 反事实续跑协议、OpenAI 兼容模型适配器、双层 Oracle 与源轨迹防篡改校验；
@@ -119,7 +119,7 @@ uv run faultlattice run tasks/local_hard_timeout.yaml
 | 验收项 | 实际结果 |
 |---|---|
 | DeepSeek M3 | 批次 `20261125T140940-c9f18d13`：4/4 任务完成、4/4 故障观察到达，四项双层判定均为 `completed`。 |
-| Kimi M3 | 批次 `20261125T143001-4f916440`，模型 `kimi-k3.1-pro`，冻结采样 `{"temperature":1}`：4/4 完成、4/4 观察到达；`langgraph_m3_empty_continuation` 为框架 `completed`、模型 `contract_violation`，其余三项双层 `completed`。该发现按原判定保留。 |
+| Kimi M3（旧规则） | 批次 `20261125T143001-4f916440`，模型 `kimi-k3.1-pro`，冻结采样 `{"temperature":1}`：4/4 完成、4/4 观察到达；空返回任务的旧模型 `contract_violation` 来自“未返回错误信号”的关键词误判，不是模型违约证据。旧模型层判定均需按新结构化声明协议重跑。 |
 | MiniMax M3 | 批次 `20261125T143230-c250d863`，模型 `MiniMax-M3.1-Flash`，冻结采样 `{"temperature":0.0}`：4/4 完成、4/4 观察到达，四项双层判定均为 `completed`；模型自述中的额外探针副作用也保留在原始轨迹中。 |
 | 真实修改建议 | DeepSeek、Kimi、MiniMax 均已在各自批次的 `langgraph_m3_error_continuation` 上生成并持久化建议，内容包含问题证据和回归测试；建议不参与 Oracle。 |
 | MySQL | 本机 `mysql80` 实机连接与独立 `faultlattice` 数据库索引重建成功；核对为 4 行、4 个唯一 `run_id`。 |
@@ -157,20 +157,12 @@ faultlattice index-runs --runs-root runs
 faultlattice similarity-build --runs-root runs --index-root runs/_index/lancedb
 faultlattice similarity-search "工具错误返回后仍声称成功" --limit 5
 
-# 对公开样例执行真实四件套复算和 baseline/current 配对门禁。
-faultlattice quality-gate runs/_sample/20261124T124335-94ebab0a \
+# 当前代码现场生成独立 current，再与版本化公开 baseline 比较。
+uv run python scripts/check_public_regression.py \
   --baseline quality/public-sample.yaml --output reports/quality-gate.md
 
-# 外部 Agent M0 门禁：四个既有坐标 + 两个预注册 A/B 坐标。
-faultlattice quality-gate \
-  runs/_sample/20261127T131928-4a109d3f \
-  runs/_sample/20261126T175052-1730a492 \
-  runs/_sample/20261127T131958-b5e13aff \
-  runs/_sample/20261126T180523-058c206a \
-  runs/_sample/20261127T145247-77cdae58 \
-  runs/_sample/20261127T145248-20a065b6 \
-  --baseline quality/external-agent-m0.yaml \
-  --output reports/external-agent-quality-gate.md
+# 外部 Agent 只复算公开四件套与报告完整性，不在干净 CI 冒充生产重跑。
+uv run pytest tests/meta/test_public_samples.py -q
 ```
 
 相似结果的 `score` 是 cosine similarity，不是成功率。质量门禁拒绝新增沉默失败、违反契约、注入失败、可判定样本丢失、产物缺失与复算失败；它是回归检查，不替代 pytest、Ruff 或 Pyright。外部门禁还逐层比较无故障判定是否变化，但无故障运行不进入要求实际注入的 `evaluable` 分母，也不因此获得稳定比例结论。

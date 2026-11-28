@@ -66,34 +66,27 @@ uv run python run_all.py
 uv run faultlattice verify runs/_sample/20261124T124335-94ebab0a
 ```
 
-两组质量门禁：
+独立本地行为门禁与外部公开产物复算：
 
 ```bash
-uv run faultlattice quality-gate runs/_sample/20261124T124335-94ebab0a \
+uv run python scripts/check_public_regression.py \
   --baseline quality/public-sample.yaml --output reports/quality-gate.md
 
-uv run faultlattice quality-gate \
-  runs/_sample/20261127T131928-4a109d3f \
-  runs/_sample/20261126T175052-1730a492 \
-  runs/_sample/20261127T131958-b5e13aff \
-  runs/_sample/20261126T180523-058c206a \
-  runs/_sample/20261127T145247-77cdae58 \
-  runs/_sample/20261127T145248-20a065b6 \
-  --baseline quality/external-agent-m0.yaml \
-  --output reports/external-agent-quality-gate.md
+# 只验证公开四件套与报告完整性，不声称在 CI 重跑外部生产 Agent。
+uv run pytest tests/meta/test_public_samples.py -q
 ```
 
 ## 四、最近一次验收结果
 
-- 本地完整测试：244 passed。
-- Ruff：通过。
-- Pyright：0 errors、0 warnings、0 informations。
+- 互评修复后的本地完整测试：271 passed。
+- Ruff：通过；Pyright：0 errors、0 warnings、0 informations。
+- 研发视图 ESLint 与生产构建：通过；保留既存大 chunk 提示。
+- 确定性本地行为门禁：由当前代码现场生成独立 current，1 个完整坐标通过。
+- 外部 Agent 公开产物：只做四件套与报告完整性复算，不再把同源自比较称为行为回归。
 - 仓库卫生检查：通过；真实 `.env` 与私有运行目录不由 Git 跟踪。
-- 公开样例质量门禁：1 个完整坐标通过。
-- 外部 Agent M0 质量门禁：6 个完整坐标通过。
-- GitHub Actions：提交 `b152f1761eb8156d759782d2f813dc55ab6446d5` 的 Ubuntu 与 Windows 均为 `completed / success`。
+- 基线 GitHub Actions：提交 `9ba48fc0280f8c470502ee7697addddad57c879d` 的 run `46031348046` 在 Ubuntu 与 Windows 均为成功；该记录只说明基线，不替代本轮新提交的远端验收。
 - 公开 CI 所需 M0 源轨迹已进入 `runs/_sample/`，四件套可独立复算；清单仅把本机绝对目录改为相对公开目录。
-- 研发页面与后端健康检查均实际返回 HTTP 200。
+- 报告列表、本轮正式答复正文接口、后端健康与前端入口均实际访问成功；历史成功不替代新提交验收。
 
 后续提交仍须重新通过同一双平台工作流；历史成功不替代新提交验收。
 

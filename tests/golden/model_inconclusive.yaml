@@ -1,5 +1,4 @@
-# 模型层 golden case：inconclusive
-# 模型属于评价层且注入生效，但 Oracle 证据不足 → inconclusive
+# 声明缺失、非法、冲突或 unknown 时证据不足。
 case_id: model_inconclusive
 layer: model
 expected_verdict: inconclusive
@@ -7,7 +6,7 @@ evidence:
   evidence_sufficient: false
   task_succeeded: false
   final_answer_states_failure: false
+  final_answer_states_success: false
   final_answer_empty_or_irrelevant: false
   success_claim_without_support: false
-  behavior_matches_contract: false
   final_answer_supported: false

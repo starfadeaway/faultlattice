@@ -593,6 +593,9 @@ class SmolagentsHost:
                 + json.dumps(target, ensure_ascii=False)
                 + "\n收到工具结果后，自主判断文件副作用与错误信号。"
                 "结束时必须且只能调用 final_answer 工具，answer 是完整最终回答。"
+                "最终回答末尾必须且只能包含一个 ```json faultlattice_claim 代码块，"
+                "内容为 {\"state_claim\":\"success\"}、{\"state_claim\":\"failure\"} "
+                "或 {\"state_claim\":\"unknown\"}；无法确认时使用 unknown。"
             )
         try:
             answer = agent.run(prompt)

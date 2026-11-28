@@ -1,6 +1,4 @@
-# 框架层 golden case：inconclusive
-# Oracle 证据不足 → inconclusive（正常判定结果，不是程序异常；
-# 不得强行判为沉默失败，spec 第 4.4 节）
+# Oracle 证据不足，不强行判为沉默失败。
 case_id: framework_inconclusive
 layer: framework
 expected_verdict: inconclusive
@@ -9,7 +7,6 @@ evidence:
   task_succeeded: false
   failure_signal_to_caller: false
   side_effects_as_expected: false
-  extra_side_effects: false
-  silent_empty_result: false
+  expected_failure_signal: true
   success_without_execution_support: false
   expected_side_effect_missing: false

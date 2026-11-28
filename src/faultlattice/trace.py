@@ -36,8 +36,18 @@ class TraceWriter:
         self._append_jsonl(self.run_dir / STEPS_JSONL, event.model_dump(mode="json"))
 
     def append_step_dict(self, record: dict) -> None:
-        """写入已组装好的事件 dict（公共字段由 runner 补齐后传入）。"""
-        self._append_jsonl(self.run_dir / STEPS_JSONL, record)
+        """按事件判别联合校验；kind 只是适配器内部标签，不重复写入。"""
+        from pydantic import TypeAdapter, ValidationError
+
+        from faultlattice.errors import TraceFormatError
+        from faultlattice.schemas import StepEvent
+
+        payload = {key: value for key, value in record.items() if key != "kind"}
+        try:
+            event = TypeAdapter(StepEvent).validate_python(payload)
+        except ValidationError as exc:
+            raise TraceFormatError(f"steps.jsonl 事件不符合 Schema: {exc}") from exc
+        self._append_jsonl(self.run_dir / STEPS_JSONL, event.model_dump(mode="json"))
 
     def append_oracle(self, judgement: BaseModel) -> None:
         self._append_jsonl(self.run_dir / ORACLE_JSONL, judgement.model_dump(mode="json"))

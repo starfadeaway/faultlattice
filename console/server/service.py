@@ -183,7 +183,6 @@ class ProjectService:
                 "name": manifest.name,
                 "subtitle": manifest.subtitle,
                 "version": faultlattice.__version__,
-                "root": str(self.root),
                 "manifest": "project.manifest.yaml",
             },
             "summary": {

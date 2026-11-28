@@ -134,6 +134,8 @@ def _coordinate(manifest: RunManifest) -> dict[str, str | None]:
         "injection_point": fault.injection_point.value if fault else None,
         "fault_type": fault.fault_type.value if fault else None,
         "surface_as": fault.surface_as.value if fault else None,
+        "model_id": task.model.model_id if task.model else None,
+        "reasoning_mode": task.model.reasoning_mode if task.model else None,
     }
 
 
@@ -203,7 +205,7 @@ def _layer_comparison(
         for item in [*baseline_targeted, *current_targeted]
         if item.manifest is not None
     ]
-    min_evaluable = max(item.task.min_evaluable for item in manifests)
+    min_evaluable = max(3, *(item.task.min_evaluable for item in manifests))
     applicable = len(current_targeted)
     oracle_insufficient = sum(
         snapshot.verdicts.get(layer.value) == "inconclusive"

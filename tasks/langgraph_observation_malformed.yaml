@@ -18,6 +18,7 @@ expected_postcondition:
   kind: file_written
   params: {path: output/hello.txt, content_contains: hello langgraph malformed}
 expected_behavior: 文件与原始工具结果保持不变，只有模型观察成为畸形内容；M0 不据此推断真实模型行为。
+expected_failure_signal: false
 fault_recoverable: true
 allowed_degradation: [记录畸形观察并按预设脚本结束]
 oracle:

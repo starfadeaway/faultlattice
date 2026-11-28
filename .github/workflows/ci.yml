@@ -46,11 +46,11 @@ jobs:
       - name: 仓库卫生检查
         run: uv run python scripts/check_repo_hygiene.py
 
-      - name: 公开样例回归质量门禁
-        run: uv run faultlattice quality-gate runs/_sample/20261124T124335-94ebab0a --baseline quality/public-sample.yaml --output reports/quality-gate.md
+      - name: 确定性本地行为回归（现场生成 current）
+        run: uv run python scripts/check_public_regression.py --baseline quality/public-sample.yaml --output reports/quality-gate.md
 
-      - name: 外部 Agent M0 公开样例回归质量门禁
-        run: uv run faultlattice quality-gate runs/_sample/20261127T131928-4a109d3f runs/_sample/20261126T175052-1730a492 runs/_sample/20261127T131958-b5e13aff runs/_sample/20261126T180523-058c206a runs/_sample/20261127T145247-77cdae58 runs/_sample/20261127T145248-20a065b6 --baseline quality/external-agent-m0.yaml --output reports/external-agent-quality-gate.md
+      - name: 外部 Agent 公开产物完整性复算（不冒充独立重跑）
+        run: uv run pytest tests/meta/test_public_samples.py -q
 
       - name: 安装研发视图依赖（lockfile 固定）
         run: npm ci --prefix console/web

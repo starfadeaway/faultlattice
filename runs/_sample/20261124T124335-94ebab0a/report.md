@@ -1,4 +1,23 @@
-# FaultLattice 运行报告
+# FaultLattice 运行报告：本地受控宿主 · local_write
+
+> 本报告先解释实际业务状态与框架信号，再列出过程、Oracle 和复算锚点。原始标识仅供定位，不代替中文结论。
+
+## 结论速览
+
+**业务任务未完成，框架返回了明确失败信号。** 这符合本次故障任务的显式失败处理预期，但不证明其他任务、模型或真实模型反应也已通过。
+
+| 阅读项 | 本次实际结果 |
+|---|---|
+| 业务任务是否完成 | 否（独立状态证据） |
+| 框架向调用方报告 | 明确失败（`failed`） |
+| 故障是否实际注入 | 是 |
+| 框架层 Oracle | 显式失败（框架或模型暴露了失败信号）（`explicit_failure`） |
+
+
+**不要把这些概念混为一谈：** 业务任务完成与否、框架返回成功还是失败、Harness 是否完成执行，是三件不同的事。本报告的 Oracle 判定不是“整个 Agent 测试通过”的徽章。
+
+> **旧口径警示：** 该历史运行没有机器可判定的 expected_failure_signal，框架层 verdict 仅按旧口径保留，不能用于新契约下的行为比较
+
 
 ## 一、这次测试做了什么
 
@@ -41,8 +60,10 @@
 
 - 模型标识：`未使用模型`
 - 是否真实调用模型：否（预设脚本不调用真实模型）
+- 思考模式：不适用（本次未预注册真实模型）
 - 本次预注册评价层：框架层
 - 采样参数：`null（本次未使用真实模型采样参数）`
+
 
 本次结果只用于评价宿主框架对故障的处理，不代表任何真实模型的行为表现。轨迹中的 `model_output` 若标记为 `preset=true`，表示它是预注册脚本内容，不是模型现场生成。
 
@@ -60,19 +81,27 @@
 
 **涉及工具：** `write_file`
 
-**最终回答：** 本次未产生非空最终回答。
+### Harness 独立后置核验
+
+**后置条件未满足：** Harness 未在沙箱中找到 `output/hello.txt`。该结论来自实际状态，不依赖被测模型是否拥有读取工具。
+
+### 预设最终回答（非真实模型输出）
+
+本次未产生非空最终回答。
+
+这段文字来自运行前冻结的脚本，只用于驱动生产循环，不能用于评价模型能力。业务结论来自真实工具、生产状态和独立后置观察。
 
 ### 逐步事件摘要
 
-下表来自 `steps.jsonl` 的实际顺序，不是事后推测。参数和返回内容以 JSON 表示；`preset` 只用于区分预设输出与真实模型输出。
+下表来自 `steps.jsonl` 的实际顺序，不是事后推测。参数和返回内容以 JSON 表示；`preset` 只用于区分预设输出与真实模型输出。工具返回中的“错误信息”是工具或宿主记录的错误文本，不自动等于未捕获异常。
 
 | 顺序 | 事件 | 实际内容 |
 |---:|---|---|
 | 1 | 任务开始（`task_start`） | 开始执行预注册任务 `local_write`。 |
 | 2 | 工具调用（`tool_call`） | 调用 `write_file`；参数：{"content":"hello faultlattice\n","path":"output/hello.txt"} |
 | 3 | 故障注入（`injection`） | 实际生效：是；原始内容：{"content":"hello faultlattice\n","path":"output/hello.txt"}；替换内容：{"content":"hello faultlattice\n","path":123}。 |
-| 4 | 工具返回（`tool_result`） | 工具 `write_file`；异常：TypeError；该结果被故障注入改写。 |
-| 5 | 运行结束（`run_end`） | 框架信号：`failed`；最终回答：（无非空最终回答）。 |
+| 4 | 工具返回（`tool_result`） | 工具 `write_file`；工具返回错误：TypeError；该结果被故障注入改写。 |
+| 5 | 运行结束（`run_end`） | 框架信号：`failed`；最终回答：（无非空最终回答） |
 
 
 ## 五、Oracle 如何判定
@@ -82,7 +111,7 @@
 | 框架层 | 显式失败（框架或模型暴露了失败信号） | `explicit_failure` |
 
 
-框架层依据实际副作用、最终信号和后置条件；模型层依据真实调用、观察状态及公开规则。下面逐项列出判定器元数据和证据，便于人工复核，而不是只给一个结论标签。
+框架层依据实际副作用、最终信号和后置条件；模型层依据真实调用、观察状态及公开规则。下面先列出人读证据，再保留可折叠的机器原文，便于复核而不是只给一个结论标签。
 
 ### 框架层
 
@@ -94,11 +123,25 @@
 - **不适用原因：** 无
 - **证据不足原因：** 无
 
-实际证据：
+关键证据：
+
+| 证据项 | 实际值 |
+|---|---|
+| 业务任务是否完成 | 否 |
+| 框架向调用方报告 | failed |
+| 目标文件是否存在 | 否 |
+| 文件内容是否符合预期 | 是 |
+| 核验路径 | output/hello.txt |
+
+
+<details>
+<summary>查看机器可读原始证据（审计用，不是另一项判定）</summary>
 
 ```json
 {"content_contains_ok":true,"exists":false,"framework_outcome":"failed","kind":"file_written","path":"output/hello.txt","task_succeeded":false}
 ```
+
+</details>
 
 
 ## 六、指标怎么读
@@ -112,8 +155,8 @@
 | 适用运行数 | 1 / 1 |
 | 可判定运行数 | 1 |
 | 沉默失败次数 | 0 |
-| 沉默失败率 | 0.00% |
-| Oracle 覆盖率 | 100.00% |
+| 沉默失败率 | N/A（单次样本） |
+| Oracle 覆盖率 | 1/1（仅本次） |
 | 证据不足次数 | 0 |
 
 
@@ -123,11 +166,11 @@
 - 适用运行数：该层在本次预注册评价范围内的运行数；未列入 `target_layers` 的层不适用。
 - 可判定运行数：注入、观察和证据满足该层判定条件的运行数；不适用和证据不足不会混入正常样本。
 - 沉默失败次数：未满足契约却被表现为正常完成的次数，必须同时有实际证据支持。
-- 沉默失败率：沉默失败数 ÷ 可判定运行数；分母为 0 或低于最低样本数时显示 N/A，而不是 0%。
-- Oracle 覆盖率：可判定运行数 ÷ 适用运行数；该层完全不适用时同样显示 N/A。
+- 沉默失败率：沉默失败数 ÷ 可判定运行数；分母为 0、低于最低样本数或只有单次运行时，人读报告显示 N/A，而不是 0% 或 100%。
+- Oracle 覆盖率：可判定运行数 ÷ 适用运行数；单次报告只显示原始数量，不把 1/1 渲染成稳定覆盖率。
 - 证据不足次数：Oracle 无法获得足够证据的次数，与“测试通过”或“发现缺陷”都不同。
 
-**最低可判定样本数：1。** 即使最低样本数为 1，单次结果也只是该坐标下的一个定性案例；批次或跨模型结论必须按相同预注册坐标聚合。
+**预注册最低可判定样本数：1。** 单运行报告始终只作定性案例；即使该阈值为 1，也不把一次结果换算成稳定比例。下方机器锚点仍保留原始数值，供同坐标批次聚合和独立复算。
 
 ## 七、结果边界与常见误读
 
@@ -167,8 +210,13 @@
 | `sampling_params` | M0–M2 不使用真实模型 |
 
 
-下方 JSON 是机器复算锚点；`faultlattice verify` 会从原始产物独立重算并逐字比较，不受上方说明文字影响。扩充人读说明不会改变该锚点的计算口径。
+<details>
+<summary>查看机器复算锚点（供 faultlattice verify 逐字核对）</summary>
+
+下方 JSON 不是实验结论正文，而是机器复算锚点；`faultlattice verify` 会从原始产物独立重算并逐字比较，不受上方说明文字影响。
 
 ```json faultlattice-metrics
-{"framework":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":0.0,"silent_failure_rate_display":"0.00%","silent_failures":0,"total_runs":1,"verdict":"explicit_failure"},"model":null,"run_id":"20261124T124335-94ebab0a","task_id":"local_write"}
+{"framework":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":null,"silent_failure_rate_display":"N/A","silent_failures":0,"total_runs":1,"verdict":"explicit_failure"},"model":null,"run_id":"20261124T124335-94ebab0a","task_id":"local_write"}
 ```
+
+</details>

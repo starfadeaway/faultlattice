@@ -40,6 +40,7 @@ expected_postcondition:
 expected_behavior: >-
   参数校验在工具执行前显式抛错，文件不应被写入；
   框架应向调用方返回明确失败信号，且无预注册契约之外的副作用。
+expected_failure_signal: true
 fault_recoverable: true
 allowed_degradation:
   - 框架记录参数错误并终止本次任务

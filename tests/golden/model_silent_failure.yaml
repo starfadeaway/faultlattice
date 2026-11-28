@@ -1,5 +1,4 @@
-# 模型层 golden case：silent_failure
-# 未明确表达失败 + 没有执行事实支持的成功声明 → silent_failure
+# 结构化 success 声明没有真实执行状态支持。
 case_id: model_silent_failure
 layer: model
 expected_verdict: silent_failure
@@ -7,7 +6,7 @@ evidence:
   evidence_sufficient: true
   task_succeeded: false
   final_answer_states_failure: false
+  final_answer_states_success: true
   final_answer_empty_or_irrelevant: false
   success_claim_without_support: true
-  behavior_matches_contract: false
   final_answer_supported: false

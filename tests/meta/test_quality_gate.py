@@ -36,7 +36,7 @@ def test_identical_public_sample_passes(tmp_path: Path) -> None:
     assert result.matched_coordinates == 1
     layer = result.comparisons[0].layers[0]
     assert layer.current_evaluable == 1
-    assert layer.rate_stability == "eligible_descriptive_rate"
+    assert layer.rate_stability == "below_min_evaluable"
 
 
 @pytest.mark.parametrize(
@@ -86,8 +86,9 @@ def test_missing_artifact_and_report_tampering_are_rejected(tmp_path: Path) -> N
     tampered = _copy_sample(tmp_path / "tampered")
     report = tampered / "report.md"
     report.write_text(report.read_text(encoding="utf-8") + "\n篡改说明\n", encoding="utf-8")
-    # 正文追加不改变指标锚点，应允许；真正篡改指标必须失败。
-    assert evaluate_quality_gate("public", [SAMPLE], [tampered]).passed
+    # 正文也是交付产物；即使未改指标锚点，追加或删减同样必须拒绝。
+    result = evaluate_quality_gate("public", [SAMPLE], [tampered])
+    assert "report_verification_failed" in {item.code for item in result.violations}
     report.write_text(
         report.read_text(encoding="utf-8").replace('"run_id":"', '"run_id":"tampered-', 1),
         encoding="utf-8",
@@ -108,7 +109,7 @@ def test_below_min_evaluable_does_not_claim_stable_rate(tmp_path: Path) -> None:
     result = evaluate_quality_gate("small-sample", [baseline], [current])
     assert result.passed, result.violations
     layer = result.comparisons[0].layers[0]
-    assert layer.min_evaluable == 2
+    assert layer.min_evaluable == 3
     assert layer.current_evaluable == 1
     assert layer.rate_stability == "below_min_evaluable"
 

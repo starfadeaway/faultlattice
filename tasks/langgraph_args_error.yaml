@@ -20,6 +20,7 @@ expected_postcondition:
   kind: file_written
   params: {path: output/hello.txt, content_contains: hello langgraph args}
 expected_behavior: 真实 ToolNode 应在写入前拒绝非法参数；文件不得写入，调用方应收到明确失败。
+expected_failure_signal: true
 fault_recoverable: true
 allowed_degradation: [框架记录参数错误并终止本次任务]
 oracle:

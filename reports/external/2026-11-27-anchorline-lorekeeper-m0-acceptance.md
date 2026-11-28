@@ -7,7 +7,7 @@
 | 被测对象与场景 | 业务任务实际结果 | 框架向调用方报告 | Harness 执行 | Oracle 判定 |
 |---|---|---|---|---|
 | Anchorline：正常 `memory_write` | 对照事实真实写入，新数据库会话确认值一致 | 正常完成 `completed` | 完成 `completed` | 正常完成 `completed` |
-| Anchorline：写入后替换工具结果 | 验收事实真实写入，新数据库会话确认值一致 | 明确失败 `failed` | 完成 `completed` | 违反契约 `contract_violation`：业务已成功，却向调用方报失败 |
+| Anchorline：写入后替换工具结果 | 验收事实真实写入，新数据库会话确认值一致 | 明确失败 `failed` | 完成 `completed` | 旧口径 `contract_violation`；与预注册失败信号要求冲突，需按新契约重跑 |
 | LoreKeeper：正常 `calculator` | 原算式未经改写并成功执行，实际返回 `1000` | 正常完成 `completed` | 完成 `completed` | 正常完成 `completed` |
 | LoreKeeper：工具参数改为除零算式 | 原算式未计算；改写后的算式按场景失败并留下错误记录 | 明确失败 `failed` | 完成 `completed` | 显式失败 `explicit_failure`：失败被记录并明确暴露 |
 
@@ -105,13 +105,13 @@ uv run faultlattice verify runs/_sample/20261126T180523-058c206a
 
 每个公开目录均包含 `run.json`、`steps.jsonl`、`oracle.jsonl`、`report.md` 四件套。副本只把 `run_dir` 改为相对的 `runs/_sample/<run_id>`，任务、故障、轨迹、Oracle 和报告保持原值；原始运行目录未修改。报告中的 `faultlattice-metrics` 是机器复算锚点，不是另一项行为判定。
 
-四个坐标已登记到 `quality/external-agent-m0.yaml` 并加入 GitHub Actions。当前 baseline 4 次、current 4 次、4 个完整坐标、0 项违规，详见[外部 Agent 回归门禁](../external-agent-quality-gate.md)。无故障坐标另比较逐层判定变化，但不进入故障实验的可判定分母；该门禁证明相对回归检查通过，不证明 Oracle 已验证或 Agent 没有其它缺陷。
+四个坐标登记在 `quality/external-agent-m0.yaml`，可用于本机质量门禁测试。干净 CI 不含外部项目私有源码，因此工作流只对公开四件套、事件 Schema 与报告全文做完整性复算，不再把同一批目录的 baseline/current 自比较称为行为回归。无故障坐标不进入故障实验的可判定分母；产物复算不证明 Oracle 已验证或 Agent 没有其它缺陷。
 
 ## 5. 定性对照说明
 
 ### 5.1 Anchorline
 
-正常执行时，真实事实写入、框架完成信号和 Oracle 完成判定一致；在工具真实提交后注入错误返回时，事实仍写入，但框架向调用方报失败，形成 `contract_violation`。这为“该故障坐标下出现业务状态与调用方信号错位”提供了对照证据。
+正常执行时，真实事实写入、框架完成信号和 Oracle 完成判定一致；在工具真实提交后注入错误返回时，事实仍写入，框架向调用方报失败，旧规则记为 `contract_violation`。真实执行事实仍成立，但该旧标签与任务预注册的明确失败要求冲突，不能再解释为“业务与信号错位”或上游违约；新契约下应重跑并判为显式失败。
 
 对照使用独立事实键，且 Anchorline 适配器未改代码。但两次仍不是同输入重复试验，不能据此估计发生率，也不能推断其它工具结果、异常形式或并发场景。
 
@@ -143,7 +143,7 @@ LoreKeeper 的无故障运行使用了扩展后的适配器版本，故障运行
 ## 7. 异常与后续
 
 1. **Anchorline 的状态—信号错位是本次真实实验发现。** 它证明该坐标下“数据库已写入”和“调用方收到失败”同时发生；是否需要修改上游框架，还需结合产品契约和更多场景人工判断。
-2. **Anchorline 的 Oracle 口径已按规范澄清。** LLM 曾建议复核“允许明确失败”与 `contract_violation` 是否冲突；对照开发提示词第七节的框架判定树和 `framework_contract_violation` 金样例后，确认“任务实际成功 + 向调用方返回失败信号”应判为 `contract_violation`。允许降级不意味着把已完成的任务改记为失败，因此本次保留原判定，无需修改 Oracle。
+2. **Anchorline 的旧 Oracle 口径已在互评后纠正。** 任务原本明确要求“写入后向调用方返回明确失败”，旧规则却把该正确报错记为 `contract_violation`。当前实现新增预注册 `expected_failure_signal`，同类未来运行应记为 `explicit_failure`；历史原始判定不回改，旧两臂零差值不再作为新契约下的 A/B 行为结论，必须重新预注册并重跑。
 3. **LoreKeeper 的显式失败是本次故障场景的预期处理。** 它不是 Harness 故障，也不能据此宣称 LoreKeeper 在其他参数、工具或真实模型下都可靠。
 4. **建议生成链路已增加截断保护。** 空响应与 `finish_reason=length` 不会作为完整建议保存；模型仍可能返回空内容，此时需要用户明确重试，不自动切换模型或关闭思考。
 5. **LoreKeeper 故障批次收尾曾出现一次 Windows 文件替换拒绝访问。** 日志记录了 `suite.json` 原子替换的 `PermissionError`；随后最终状态已持久化，当前接口、套件文件和单次产物一致，复算通过。现已在文件句柄关闭后对 Windows 瞬态 `PermissionError` 增加最多五次、总计至多 0.75 秒的退避重试；持续占用和非 Windows 权限错误仍立即抛出。新增测试覆盖“第三次成功”“持续失败五次”“非 Windows 不重试”，不修改历史日志或实验产物。

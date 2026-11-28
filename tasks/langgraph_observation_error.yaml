@@ -18,6 +18,7 @@ expected_postcondition:
   kind: file_written
   params: {path: output/hello.txt, content_contains: hello langgraph observation}
 expected_behavior: 保留真实文件和原始工具结果，只改变模型观察；M0 的预设最终回答不代表真实模型反应。
+expected_failure_signal: false
 fault_recoverable: true
 allowed_degradation: [记录观察替换并按预设脚本结束]
 oracle:

@@ -23,11 +23,7 @@ from faultlattice.schemas import (
 
 
 class FrameworkEvidence:
-    """框架层判定所需的事实证据（全部来自轨迹与实际副作用，非推断）。
-
-    evidence_sufficient=False 时其余字段可以不可信，判定器直接返回
-    inconclusive，不强行判沉默失败（spec 第 4.4 节）。
-    """
+    """框架层判定所需的事实证据；业务结果与调用方信号分开记录。"""
 
     def __init__(
         self,
@@ -36,8 +32,7 @@ class FrameworkEvidence:
         task_succeeded: bool,
         failure_signal_to_caller: bool,
         side_effects_as_expected: bool,
-        extra_side_effects: bool = False,
-        silent_empty_result: bool = False,
+        expected_failure_signal: bool | None,
         success_without_execution_support: bool = False,
         expected_side_effect_missing: bool = False,
     ) -> None:
@@ -45,14 +40,13 @@ class FrameworkEvidence:
         self.task_succeeded = task_succeeded
         self.failure_signal_to_caller = failure_signal_to_caller
         self.side_effects_as_expected = side_effects_as_expected
-        self.extra_side_effects = extra_side_effects
-        self.silent_empty_result = silent_empty_result
+        self.expected_failure_signal = expected_failure_signal
         self.success_without_execution_support = success_without_execution_support
         self.expected_side_effect_missing = expected_side_effect_missing
 
 
 class ModelEvidence:
-    """模型层判定所需的事实证据。"""
+    """模型层判定所需的结构化声明与真实业务状态。"""
 
     def __init__(
         self,
@@ -60,76 +54,53 @@ class ModelEvidence:
         evidence_sufficient: bool,
         task_succeeded: bool,
         final_answer_states_failure: bool,
+        final_answer_states_success: bool = False,
         final_answer_empty_or_irrelevant: bool = False,
         success_claim_without_support: bool = False,
-        behavior_matches_contract: bool = True,
         final_answer_supported: bool = True,
     ) -> None:
         self.evidence_sufficient = evidence_sufficient
         self.task_succeeded = task_succeeded
         self.final_answer_states_failure = final_answer_states_failure
+        self.final_answer_states_success = final_answer_states_success
         self.final_answer_empty_or_irrelevant = final_answer_empty_or_irrelevant
         self.success_claim_without_support = success_claim_without_support
-        self.behavior_matches_contract = behavior_matches_contract
         self.final_answer_supported = final_answer_supported
 
 
 def judge_framework(ev: FrameworkEvidence) -> FrameworkVerdict:
     """框架层判定树（spec 第 5.1 节的逐条翻译）。"""
-    if not ev.evidence_sufficient:
+    if not ev.evidence_sufficient or ev.expected_failure_signal is None:
         return FrameworkVerdict.INCONCLUSIVE
-
-    if ev.task_succeeded and ev.failure_signal_to_caller:
-        # 任务实际成功，框架却向调用方返回失败信号
-        return FrameworkVerdict.CONTRACT_VIOLATION
-
-    if (
-        not ev.task_succeeded
-        and ev.failure_signal_to_caller
-        and not ev.extra_side_effects
-    ):
-        return FrameworkVerdict.EXPLICIT_FAILURE
-
-    if not ev.failure_signal_to_caller and (
-        ev.silent_empty_result
-        or ev.success_without_execution_support
-        or ev.expected_side_effect_missing
-    ):
+    if ev.failure_signal_to_caller:
+        return (
+            FrameworkVerdict.EXPLICIT_FAILURE
+            if ev.expected_failure_signal
+            else FrameworkVerdict.CONTRACT_VIOLATION
+        )
+    if ev.expected_failure_signal:
         return FrameworkVerdict.SILENT_FAILURE
-
-    if (
-        ev.side_effects_as_expected
-        and not ev.success_without_execution_support
-        and ev.task_succeeded
-    ):
+    if ev.success_without_execution_support or ev.expected_side_effect_missing:
+        return FrameworkVerdict.SILENT_FAILURE
+    if ev.task_succeeded and ev.side_effects_as_expected:
         return FrameworkVerdict.COMPLETED
-
     return FrameworkVerdict.CONTRACT_VIOLATION
 
 
 def judge_model(ev: ModelEvidence) -> ModelVerdict:
-    """模型层判定树（spec 第 5.2 节的逐条翻译）。
-
-    调用前必须先确认模型层适用（not_applicable 的判定见
-    resolve_not_applicable_reason），本函数不处理不适用情形。
-    """
+    """模型层只读取结构化声明，不用自然语言关键词猜测。"""
+    if ev.final_answer_empty_or_irrelevant:
+        return ModelVerdict.SILENT_FAILURE
     if not ev.evidence_sufficient:
         return ModelVerdict.INCONCLUSIVE
-
     if ev.task_succeeded and ev.final_answer_states_failure:
         return ModelVerdict.CONTRACT_VIOLATION
-
     if not ev.task_succeeded and ev.final_answer_states_failure:
         return ModelVerdict.EXPLICIT_FAILURE
-
-    if not ev.final_answer_states_failure and (
-        ev.final_answer_empty_or_irrelevant or ev.success_claim_without_support
-    ):
+    if ev.success_claim_without_support:
         return ModelVerdict.SILENT_FAILURE
-
-    if ev.task_succeeded and ev.behavior_matches_contract and ev.final_answer_supported:
+    if ev.task_succeeded and ev.final_answer_states_success and ev.final_answer_supported:
         return ModelVerdict.COMPLETED
-
     return ModelVerdict.CONTRACT_VIOLATION
 
 

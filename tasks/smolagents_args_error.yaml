@@ -20,6 +20,7 @@ expected_postcondition:
   kind: file_written
   params: {path: output/hello.txt, content_contains: hello smolagents args}
 expected_behavior: 参数校验应在写入前拒绝非法 path，文件不得写入；框架应向调用方显式报告失败。
+expected_failure_signal: true
 fault_recoverable: true
 allowed_degradation: [框架记录参数错误并终止本次任务]
 oracle:

@@ -1,5 +1,4 @@
-# 框架层 golden case：silent_failure
-# 无失败信号 + 返回正常完成但没有执行事实支持 → silent_failure
+# 正常完成信号没有执行事实支持。
 case_id: framework_silent_failure
 layer: framework
 expected_verdict: silent_failure
@@ -8,7 +7,6 @@ evidence:
   task_succeeded: false
   failure_signal_to_caller: false
   side_effects_as_expected: false
-  extra_side_effects: false
-  silent_empty_result: false
+  expected_failure_signal: false
   success_without_execution_support: true
   expected_side_effect_missing: true

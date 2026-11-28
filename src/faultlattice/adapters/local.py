@@ -38,6 +38,7 @@ def _write_file_tool(
     args: dict[str, Any], sandbox: Path, *, delay_seconds: float = 0.0
 ) -> dict[str, Any]:
     """顶层工具入口必须可由 spawn 序列化；延迟发生在真实写入之前。"""
+    sandbox = Path(sandbox).resolve()
     path = args.get("path")
     content = args.get("content")
     if not isinstance(path, str) or not isinstance(content, str):
@@ -52,7 +53,7 @@ def _write_file_tool(
         raise ConfigurationError(f"write_file 路径越出沙箱: {path}")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8", newline="\n")
-    return {"written": str(Path(path)), "bytes": len(content.encode("utf-8"))}
+    return {"written": Path(path).as_posix(), "bytes": len(content.encode("utf-8"))}
 
 
 class LocalControlledHost:
@@ -120,6 +121,8 @@ class LocalControlledHost:
                 )
 
                 injected_exception: BaseException | None = None
+                injected_return: Any = None
+                has_injected_return = False
                 result: Any = None
                 injected = False
 
@@ -146,9 +149,12 @@ class LocalControlledHost:
                     injected = applied
                     args = corrupted
                     if fault.surface_as is SurfaceAs.RAISE_EXCEPTION and applied:
-                        # raise_exception 形态：校验错误以异常呈现；本地宿主的
-                        # 校验本身就会抛 TypeError，这里显式使用注入构造的异常
                         injected_exception = effect.exception
+                    elif fault.surface_as is SurfaceAs.RETURN_VALUE and applied:
+                        # return_value 必须在普通返回通道呈现，不得再把坏参数交给
+                        # 真实工具并让它抛 TypeError；工具未执行，因此没有副作用。
+                        injected_return = effect.replacement
+                        has_injected_return = True
 
                 process_requested = bool(
                     fault is not None and fault.params.get("timeout_mode") == "process"
@@ -157,7 +163,9 @@ class LocalControlledHost:
                 try:
                     if injected_exception is not None:
                         raise injected_exception
-                    if process_requested:
+                    if has_injected_return:
+                        result = injected_return
+                    elif process_requested:
                         assert fault is not None
                         try:
                             result = run_with_process_timeout(

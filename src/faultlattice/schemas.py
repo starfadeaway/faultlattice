@@ -204,6 +204,8 @@ class TaskDefinition(BaseModel):
     target_layers: list[TargetLayer] = Field(min_length=1)
     expected_postcondition: ExpectedPostcondition
     expected_behavior: str
+    # 新运行必须显式冻结；None 仅用于读取旧版历史 run.json。
+    expected_failure_signal: bool | None = None
     fault_recoverable: bool
     allowed_degradation: list[str] = Field(default_factory=list)
     oracle: OracleSpec
@@ -245,7 +247,8 @@ class TaskDefinition(BaseModel):
 class EventBase(BaseModel):
     """所有事件的公共字段。"""
 
-    model_config = ConfigDict(frozen=True)
+    # 允许带诊断扩展字段，但判别类型、公共字段和类型专属必填字段必须验证。
+    model_config = ConfigDict(frozen=True, extra="allow")
 
     run_id: str
     step_id: str
@@ -365,5 +368,8 @@ class RunManifest(BaseModel):
     injection_applied: bool
     observation_status: ObservationStatus
     model_invoked: bool = False  # 模型层是否实际被调用（M0–M2 恒为 False）
-    # 运行所在目录相对仓库根的路径，便于报告引用
+    # 运行所在目录相对仓库根的路径，便于报告引用；不得泄露本机绝对路径。
     run_dir: str
+    # 新运行写入原始轨迹哈希；None 仅表示历史产物没有可回溯校验的哈希。
+    steps_sha256: str | None = None
+    oracle_sha256: str | None = None

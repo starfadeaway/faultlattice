@@ -31,6 +31,7 @@ expected_postcondition:
 expected_behavior: >-
   工具执行事实与错误返回同时存在；框架应向调用方显式报告失败，
   不应在收到 error_response 后仍按正常完成处理。
+expected_failure_signal: true
 fault_recoverable: true
 allowed_degradation:
   - 框架记录错误并终止任务

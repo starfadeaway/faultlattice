@@ -18,6 +18,7 @@ expected_postcondition:
   kind: file_written
   params: {path: output/hello.txt, content_contains: hello smolagents exception}
 expected_behavior: 文件副作用与工具异常同时存在；框架应记录异常并返回明确失败，不得宣称整个任务正常完成。
+expected_failure_signal: true
 fault_recoverable: true
 allowed_degradation: [框架记录工具异常并终止任务]
 oracle:

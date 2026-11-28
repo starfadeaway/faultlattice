@@ -132,9 +132,10 @@ def test_batch_metrics_aggregate_without_hiding_evidence_gaps(tmp_path: Path) ->
     runs = [
         _write_run(tmp_path, "run-a", task, verdict=FrameworkVerdict.SILENT_FAILURE),
         _write_run(tmp_path, "run-b", task, verdict=FrameworkVerdict.COMPLETED),
+        _write_run(tmp_path, "run-c", task, verdict=FrameworkVerdict.COMPLETED),
         _write_run(
             tmp_path,
-            "run-c",
+            "run-d",
             task,
             verdict=FrameworkVerdict.INCONCLUSIVE,
             inconclusive_reason=InconclusiveReason.ORACLE_EVIDENCE_INSUFFICIENT,
@@ -142,14 +143,14 @@ def test_batch_metrics_aggregate_without_hiding_evidence_gaps(tmp_path: Path) ->
     ]
 
     metrics = compute_batch_metrics(runs)
-    assert metrics["total_runs"] == 3
+    assert metrics["total_runs"] == 4
     assert len(metrics["groups"]) == 1
     framework = metrics["groups"][0]["framework"]
-    assert framework["applicable"] == 3
-    assert framework["evaluable"] == 2
+    assert framework["applicable"] == 4
+    assert framework["evaluable"] == 3
     assert framework["silent_failures"] == 1
-    assert framework["silent_failure_rate"] == 0.5
-    assert framework["oracle_coverage"] == pytest.approx(2 / 3)
+    assert framework["silent_failure_rate"] == pytest.approx(1 / 3)
+    assert framework["oracle_coverage"] == pytest.approx(3 / 4)
     assert framework["oracle_insufficient"] == 1
     assert framework["rate_suppressed_reason"] is None
 
@@ -168,13 +169,7 @@ def test_inconclusive_threshold_gate_suppresses_rate(tmp_path: Path) -> None:
     runs = [
         _write_run(tmp_path, "run-a", task, verdict=FrameworkVerdict.SILENT_FAILURE),
         _write_run(tmp_path, "run-b", task, verdict=FrameworkVerdict.COMPLETED),
-        _write_run(
-            tmp_path,
-            "run-c",
-            task,
-            verdict=FrameworkVerdict.INCONCLUSIVE,
-            inconclusive_reason=InconclusiveReason.ORACLE_EVIDENCE_INSUFFICIENT,
-        ),
+        _write_run(tmp_path, "run-c", task, verdict=FrameworkVerdict.COMPLETED),
         _write_run(
             tmp_path,
             "run-d",
@@ -182,10 +177,17 @@ def test_inconclusive_threshold_gate_suppresses_rate(tmp_path: Path) -> None:
             verdict=FrameworkVerdict.INCONCLUSIVE,
             inconclusive_reason=InconclusiveReason.ORACLE_EVIDENCE_INSUFFICIENT,
         ),
+        _write_run(
+            tmp_path,
+            "run-e",
+            task,
+            verdict=FrameworkVerdict.INCONCLUSIVE,
+            inconclusive_reason=InconclusiveReason.ORACLE_EVIDENCE_INSUFFICIENT,
+        ),
     ]
     framework = compute_batch_metrics(runs)["groups"][0]["framework"]
-    assert framework["evaluable"] == 2
-    assert framework["oracle_insufficient_ratio"] == 0.5
+    assert framework["evaluable"] == 3
+    assert framework["oracle_insufficient_ratio"] == 0.4
     assert framework["silent_failure_rate"] is None
     assert framework["rate_suppressed_reason"] == "inconclusive_threshold_exceeded"
 
@@ -201,26 +203,32 @@ def test_injection_failure_is_not_oracle_evidence_insufficiency(tmp_path: Path) 
             injection_applied=False,
             inconclusive_reason=InconclusiveReason.INJECTION_FAILED,
         ),
-        _write_run(tmp_path, "run-b", task, verdict=FrameworkVerdict.COMPLETED),
+        *[
+            _write_run(tmp_path, f"run-{suffix}", task, verdict=FrameworkVerdict.COMPLETED)
+            for suffix in ("b", "c", "d")
+        ],
     ]
     framework = compute_batch_metrics(runs)["groups"][0]["framework"]
     assert framework["injection_failed"] == 1
     assert framework["oracle_insufficient"] == 0
-    assert framework["evaluable"] == 1
+    assert framework["evaluable"] == 3
     assert framework["silent_failure_rate"] == 0.0
 
 
 def test_model_evaluable_requires_observation_reached(tmp_path: Path) -> None:
     task = _task(mode=ExecutionMode.M3, layers=[TargetLayer.MODEL])
     runs = [
-        _write_run(
-            tmp_path,
-            "run-a",
-            task,
-            layer=TargetLayer.MODEL,
-            verdict=ModelVerdict.COMPLETED,
-            observation_status=ObservationStatus.REACHED,
-        ),
+        *[
+            _write_run(
+                tmp_path,
+                f"run-{suffix}",
+                task,
+                layer=TargetLayer.MODEL,
+                verdict=ModelVerdict.COMPLETED,
+                observation_status=ObservationStatus.REACHED,
+            )
+            for suffix in ("a", "c", "d")
+        ],
         _write_run(
             tmp_path,
             "run-b",
@@ -231,8 +239,8 @@ def test_model_evaluable_requires_observation_reached(tmp_path: Path) -> None:
         ),
     ]
     model = compute_batch_metrics(runs)["groups"][0]["model"]
-    assert model["applicable"] == 2
-    assert model["evaluable"] == 1
+    assert model["applicable"] == 4
+    assert model["evaluable"] == 3
     assert model["silent_failures"] == 0
     assert model["silent_failure_rate"] == 0.0
 
@@ -257,8 +265,14 @@ def test_ab_metrics_report_each_arm_and_b_minus_a(tmp_path: Path) -> None:
     a = _task(surface=SurfaceAs.RETURN_VALUE, pair_id="pair-1")
     b = _task(surface=SurfaceAs.RAISE_EXCEPTION, pair_id="pair-1")
     runs = [
-        _write_run(tmp_path, "run-a", a, verdict=FrameworkVerdict.SILENT_FAILURE),
-        _write_run(tmp_path, "run-b", b, verdict=FrameworkVerdict.EXPLICIT_FAILURE),
+        *[
+            _write_run(tmp_path, f"run-a-{index}", a, verdict=FrameworkVerdict.SILENT_FAILURE)
+            for index in range(3)
+        ],
+        *[
+            _write_run(tmp_path, f"run-b-{index}", b, verdict=FrameworkVerdict.EXPLICIT_FAILURE)
+            for index in range(3)
+        ],
     ]
     metrics = compute_batch_metrics(runs)
     pair = metrics["pairs"][0]

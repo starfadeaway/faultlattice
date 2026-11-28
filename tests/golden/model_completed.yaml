@@ -1,5 +1,4 @@
-# 模型层 golden case：completed
-# 任务成功、最终回答有执行事实支持、行为符合预注册契约 → completed
+# 任务成功且结构化 success 声明有真实状态支持。
 case_id: model_completed
 layer: model
 expected_verdict: completed
@@ -7,7 +6,7 @@ evidence:
   evidence_sufficient: true
   task_succeeded: true
   final_answer_states_failure: false
+  final_answer_states_success: true
   final_answer_empty_or_irrelevant: false
   success_claim_without_support: false
-  behavior_matches_contract: true
   final_answer_supported: true

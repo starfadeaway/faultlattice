@@ -23,6 +23,8 @@ REQUIRED_GITIGNORE_RULES = [
     ".env",
     ".verify/",
     "external_projects/",
+    "external_agents/uploads/",
+    "external_agents/drafts/",
 ]
 
 

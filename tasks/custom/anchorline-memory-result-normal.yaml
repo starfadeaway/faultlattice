@@ -25,6 +25,7 @@ script:
 expected_behavior: >-
   生产工具应真实写入并提交对照事实，不得发生工具结果替换。
   独立会话应读到预注册值，宿主应记录成功工具结果并向调用方报告完成。
+expected_failure_signal: false
 fault_recoverable: false
 allowed_degradation: []
 oracle:

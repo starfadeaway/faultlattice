@@ -32,6 +32,7 @@ def _task() -> TaskDefinition:
             params={"summary": "测试记录应与预注册值一致"},
         ),
         expected_behavior="真实记录存在且值一致时才允许完成",
+        expected_failure_signal=False,
         fault_recoverable=True,
         oracle=OracleSpec(
             source=OracleSource.STATE,

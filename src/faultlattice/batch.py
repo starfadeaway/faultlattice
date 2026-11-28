@@ -199,7 +199,8 @@ def _layer_metrics(records: Sequence[_RunRecord], layer: TargetLayer) -> dict[st
     suppressed_reason: str | None = None
     if evaluable == 0:
         suppressed_reason = "no_evaluable_runs"
-    elif evaluable < task.min_evaluable:
+    elif evaluable < max(3, task.min_evaluable):
+        # 统一最低描述样本数与任务阈值同时生效，n=1/2 只列原始计数。
         suppressed_reason = "below_min_evaluable"
     elif applicable and oracle_insufficient / applicable > task.inconclusive_threshold:
         suppressed_reason = "inconclusive_threshold_exceeded"
@@ -441,6 +442,12 @@ def verify_batch_report(report_path: Path, run_dirs: Sequence[Path]) -> list[str
         return ["批次报告中找不到 ```json faultlattice-batch-metrics 指标块"]
     expected = canonical_dumps(compute_batch_metrics(run_dirs))
     actual = match.group("json")
+    problems = []
     if actual != expected:
-        return ["批次报告指标与原始产物独立重算结果不一致"]
-    return []
+        problems.append("批次报告指标与原始产物独立重算结果不一致")
+    expected_text = render_batch_report(run_dirs)
+    if not expected_text.endswith("\n"):
+        expected_text += "\n"
+    if report_path.read_text(encoding="utf-8") != expected_text:
+        problems.append("批次报告正文与原始产物重渲染结果不一致")
+    return problems

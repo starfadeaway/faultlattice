@@ -57,6 +57,8 @@ class ExternalAgentService:
     def __init__(self, root: Path) -> None:
         self.root = Path(root).resolve()
         self.registry_path = self.root / "external_agents" / "registry.yaml"
+        # 只有显式登记、预检或运行才执行适配器；列表只读缓存和登记元数据。
+        self._inspections: dict[str, dict[str, Any]] = {}
 
     def _safe_error(self, exc: BaseException) -> str:
         return str(exc).replace(str(self.root), "<workspace>")
@@ -65,6 +67,8 @@ class ExternalAgentService:
         candidate = Path(relative)
         if candidate.is_absolute() or candidate.suffix != ".py":
             raise ConfigurationError("适配器入口必须是项目内的相对 .py 文件路径")
+        if candidate.parts[:2] == ("external_agents", "uploads"):
+            raise ConfigurationError("上传资料区不可作为可执行适配器入口；请人工审查并保存为草案")
         path = (self.root / candidate).resolve()
         if self.root not in path.parents:
             raise ConfigurationError("适配器入口不得越出项目根目录")
@@ -185,7 +189,7 @@ class ExternalAgentService:
 
     def _inspect(self, registration: ExternalRegistration) -> dict[str, Any]:
         host, capabilities, source_hash = self._load_host(registration)
-        return {
+        inspected = {
             **registration.model_dump(mode="json"),
             "status": "ready",
             "error": None,
@@ -196,26 +200,45 @@ class ExternalAgentService:
             "capabilities": capabilities.model_dump(mode="json"),
             "compatible_tasks": self._compatible_tasks(host, capabilities),
         }
+        self._inspections[registration.id] = inspected
+        return inspected
+
+    def preflight(self, agent_id: str) -> dict[str, Any]:
+        """显式加载一个已登记宿主；其他适配器不会被执行。"""
+        return self._inspect(self._registration(agent_id))
+
+    def invalidate_inspections(self) -> None:
+        """任务集合变化后丢弃能力缓存；不加载或执行任何适配器。"""
+        self._inspections.clear()
 
     def list(self) -> list[dict[str, Any]]:
+        """只读登记、源码哈希与已有预检缓存，不执行任何适配器代码。"""
         result = []
         for registration in self._registry().agents:
+            base = {
+                **registration.model_dump(mode="json"),
+                "status": "registered",
+                "error": None,
+                "host_name": None,
+                "host_package_version": None,
+                "host_commit": None,
+                "source_sha256": None,
+                "capabilities": None,
+                "compatible_tasks": [],
+            }
             try:
-                result.append(self._inspect(registration))
-            except FaultLatticeError as exc:
-                result.append(
-                    {
-                        **registration.model_dump(mode="json"),
-                        "status": "error",
-                        "error": self._safe_error(exc),
-                        "host_name": None,
-                        "host_package_version": None,
-                        "host_commit": None,
-                        "source_sha256": None,
-                        "capabilities": None,
-                        "compatible_tasks": [],
-                    }
-                )
+                source_hash = sha256_hex(self._resolve_entrypoint(registration.entrypoint).read_bytes())
+                base["source_sha256"] = source_hash
+                cached = self._inspections.get(registration.id)
+                if cached is not None and cached["source_sha256"] == source_hash:
+                    result.append(cached)
+                    continue
+                if cached is not None:
+                    base["error"] = "适配器源码已变化，请显式重新预检"
+            except (OSError, FaultLatticeError) as exc:
+                base["status"] = "error"
+                base["error"] = self._safe_error(exc)
+            result.append(base)
         return result
 
     def register(self, *, agent_id: str, name: str, entrypoint: str, class_name: str) -> dict[str, Any]:

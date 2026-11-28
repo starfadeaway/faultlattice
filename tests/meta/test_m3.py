@@ -57,16 +57,19 @@ def test_m3_rejects_tool_args_continuation() -> None:
 
 def test_mixed_success_and_error_answer_is_not_misclassified() -> None:
     evidence, details = _model_rule_evidence("文件已写入，但工具返回错误。", True)
+    assert evidence.evidence_sufficient is False
     assert evidence.final_answer_states_failure is False
-    assert evidence.final_answer_supported is True
-    assert details["matched_success_markers"]
-    assert details["matched_failure_markers"]
+    assert evidence.final_answer_states_success is False
+    assert details["state_claim"] is None
+    assert details["state_claim_error"] is None
 
 
 def test_success_claim_requires_actual_postcondition() -> None:
-    evidence, _ = _model_rule_evidence("任务已成功完成。", False)
+    answer = '已执行。\n```json faultlattice_claim\n{"state_claim":"success"}\n```'
+    evidence, details = _model_rule_evidence(answer, False)
     assert evidence.success_claim_without_support is True
     assert evidence.final_answer_supported is False
+    assert details["state_claim"] == "success"
 
 
 def test_m3_source_must_exist(tmp_path: Path) -> None:

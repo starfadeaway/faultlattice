@@ -1,4 +1,23 @@
-# FaultLattice 运行报告
+# FaultLattice 运行报告：LangGraph · langgraph_m3_observation_malformed
+
+> 本报告先解释实际业务状态与框架信号，再列出过程、Oracle 和复算锚点。原始标识仅供定位，不代替中文结论。
+
+## 结论速览
+
+**业务任务完成，框架报告正常完成。** 该结论仅适用于当前一次预注册坐标。
+
+| 阅读项 | 本次实际结果 |
+|---|---|
+| 业务任务是否完成 | 是（独立状态证据） |
+| 框架向调用方报告 | 正常完成（`completed`） |
+| 故障是否实际注入 | 是 |
+| 框架层 Oracle | 正常完成（`completed`） |
+| 模型层 Oracle | 正常完成（`completed`） |
+
+**不要把这些概念混为一谈：** 业务任务完成与否、框架返回成功还是失败、Harness 是否完成执行，是三件不同的事。本报告的 Oracle 判定不是“整个 Agent 测试通过”的徽章。
+
+> **旧口径警示：** 该历史运行没有机器可判定的 expected_failure_signal，框架层 verdict 仅按旧口径保留，不能用于新契约下的行为比较；模型层 verdict 来自旧版自然语言关键词规则，是否定句与混合表述均可能误判；它不是已验证的模型行为结论，需按结构化 state_claim 契约重新实验
+
 
 ## 一、这次测试做了什么
 
@@ -65,17 +84,17 @@
 
 ### Harness 独立后置核验
 
-**通过：** Harness 在运行结束后直接检查沙箱，确认 `output/hello.txt` 存在且内容符合预注册条件。该结论来自实际状态，不依赖被测模型是否拥有读取工具。
+**后置条件已满足：** Harness 在运行结束后直接检查沙箱，确认 `output/hello.txt` 存在且内容符合预注册条件。该结论来自实际状态，不依赖被测模型是否拥有读取工具。
 
-### 被测模型最终回答（自述）
+### 真实模型最终回答（自述）
 
 ## 执行结果<br><br>**第一轮（按契约执行）**：只调用了一次 `write_file`，参数严格等于 `{"path": "output/hello.txt", "content": "hello langgraph malformed\n"}`，未先给出最终回答。<br><br>**工具返回（错误信号）**：每一次调用——共 4 次，参数各不相同——返回的都是同一段字面量：<br><br>```<br>{"broken": }<br>```<br><br>这既不是合法 JSON（`}` 前缺少值），也不含任何成功/确认字段（无 `ok`/`success`/`error`/`path` 等）。因此工具**没有给出任何成功确认**，而是以一个畸形响应表明调用链存在故障。我没有把它当作"写入成功"。<br><br>**文件副作用（与上面的错误信号区分开）**：实际发起过的写入请求共 4 次，可能已在沙箱落盘：<br><br>\| # \| 路径 \| 内容 \| 目的 \|<br>\|---\|------\|------\|------\|<br>\| 1 \| `output/hello.txt` \| `hello langgraph malformed\n` \| 预注册目标（契约调用） \|<br>\| 2 \| `output/hello.txt` \| 同上 \| 幂等重试，验证是否为偶发故障 \|<br>\| 3 \| `output/_probe_check.txt` \| `probe\n` \| 探针：换路径/内容是否仍畸形 \|<br>\| 4 \| `probe_flat_root.txt` \| `probe flat\n` \| 探针：去掉子目录是否影响行为 \|<br><br>其中 1、2 指向同一文件、同一内容，属幂等操作；3、4 是诊断性探针，若写入确实生效，会在沙箱中**多留下两个额外文件**（`_probe_check.txt`、`probe_flat_root.txt`）。这是我的取舍：为区分"工具普遍损坏"与"特定路径/内容触发"，我选择用可观测副作用换取信息，并在此明确披露。<br><br>**验证能力的局限**：本会话只暴露了 `write_file` 一个工具，没有读取/校验接口，所以**我无法确认 `output/hello.txt` 是否真的存在、内容是否为 `hello langgraph malformed\n`**。当前可报告的事实是：写入请求已发出，而工具每次都以畸形载荷回应，从未返回成功凭证。<br><br>**结论**：<br>- 目标写入在请求层面已按预注册契约完成，未偏离路径与内容。<br>- 工具侧持续返回畸形响应（4/4 次相同），属于真实的错误信号，不能被解读为成功。<br>- 文件最终状态不可验证；建议以一个具备读回能力的运行（读取 `output/hello.txt`）来判定实际落盘情况，并在必要时清理上述两个探针文件。
 
-这段回答只反映被测模型从工具消息和自身上下文中能够知道的事实。模型没有读取工具时，“文件写入状态未经验证”表示模型无法自行读回确认，不表示 Harness 也没有检查；两者必须分开阅读，不能以模型自述替代实际状态证据。
+模型自述只用于模型层规则，不替代 Harness 对真实状态的独立核验；模型未读取业务状态时，其“未验证”不等于 Harness 也未验证。
 
 ### 逐步事件摘要
 
-下表来自 `steps.jsonl` 的实际顺序，不是事后推测。参数和返回内容以 JSON 表示；`preset` 只用于区分预设输出与真实模型输出。
+下表来自 `steps.jsonl` 的实际顺序，不是事后推测。参数和返回内容以 JSON 表示；`preset` 只用于区分预设输出与真实模型输出。工具返回中的“错误信息”是工具或宿主记录的错误文本，不自动等于未捕获异常。
 
 | 顺序 | 事件 | 实际内容 |
 |---:|---|---|
@@ -97,7 +116,7 @@
 | 16 | 工具返回（`tool_result`） | 工具 `write_file`；返回：{"bytes":11,"written":"probe_flat_root.txt"}。 |
 | 17 | 故障注入（`injection`） | 实际生效：是；原始内容："{\"written\": \"probe_flat_root.txt\", \"bytes\": 11}"；替换内容："{\"broken\": "。 |
 | 18 | 模型输出（`model_output`） | 真实模型输出（故障后续跑）：## 执行结果<br><br>**第一轮（按契约执行）**：只调用了一次 `write_file`，参数严格等于 `{"path": "output/hello.txt", "content": "hello langgraph malformed\n"}`，未先给出最终回答。<br><br>**工具返回（错误信号）**：每一次调用——共 4 次，参数各不相同——返回的都是同一段字面量：<br><br>```<br>{"broken": }<br>```<br><br>这既不是合法 JSON（`}` 前缺少值），也不含任何成功/确认字段（无 `ok`/`success`/`error`/`path` 等）。因此工具**没有给出任何成功确认**，而是以一个畸形响应表明调用链存在故障。我没有把它当作"写入成功"。<br><br>**文件副作用（与上面的错误信号区分开）**：实际发起过的写入请求共 4 次，可能已在沙箱落盘：<br><br>\| # \| 路径 \| 内容 \| 目的 \|<br>\|---\|------\|------\|------\|<br>\| 1 \| `output/hello.txt` \| `hello langgraph malformed\n` \| 预注册目标（契约调用） \|<br>\| 2 \| `output/hello.txt` \| 同上 \| 幂等重试，验证是否为偶发故障 \|<br>\| 3 \| `output/_probe_check.txt` \| `probe\n` \| 探针：换路径/内容是否仍畸形 \|<br>\| 4 \| `probe_flat_root.txt` \| `probe flat\n` \| 探针：去掉子目录是否影响行为 \|<br><br>其中 1、2 指向同一文件、同一内容，属幂等操作；3、4 是诊断性探针，若写入确实生效，会在沙箱中**多留下两个额外文件**（`_probe_check.txt`、`probe_flat_root.txt`）。这是我的取舍：为区分"工具普遍损坏"与"特定路径/内容触发"，我选择用可观测副作用换取信息，并在此明确披露。<br><br>**验证能力的局限**：本会话只暴露了 `write_file` 一个工具，没有读取/校验接口，所以**我无法确认 `output/hello.txt` 是否真的存在、内容是否为 `hello langgraph malformed\n`**。当前可报告的事实是：写入请求已发出，而工具每次都以畸形载荷回应，从未返回成功凭证。<br><br>**结论**：<br>- 目标写入在请求层面已按预注册契约完成，未偏离路径与内容。<br>- 工具侧持续返回畸形响应（4/4 次相同），属于真实的错误信号，不能被解读为成功。<br>- 文件最终状态不可验证；建议以一个具备读回能力的运行（读取 `output/hello.txt`）来判定实际落盘情况，并在必要时清理上述两个探针文件。；原始思考字段已记录 |
-| 19 | 运行结束（`run_end`） | 框架信号：`completed`；最终回答：## 执行结果<br><br>**第一轮（按契约执行）**：只调用了一次 `write_file`，参数严格等于 `{"path": "output/hello.txt", "content": "hello langgraph malformed\n"}`，未先给出最终回答。<br><br>**工具返回（错误信号）**：每一次调用——共 4 次，参数各不相同——返回的都是同一段字面量：<br><br>```<br>{"broken": }<br>```<br><br>这既不是合法 JSON（`}` 前缺少值），也不含任何成功/确认字段（无 `ok`/`success`/`error`/`path` 等）。因此工具**没有给出任何成功确认**，而是以一个畸形响应表明调用链存在故障。我没有把它当作"写入成功"。<br><br>**文件副作用（与上面的错误信号区分开）**：实际发起过的写入请求共 4 次，可能已在沙箱落盘：<br><br>\| # \| 路径 \| 内容 \| 目的 \|<br>\|---\|------\|------\|------\|<br>\| 1 \| `output/hello.txt` \| `hello langgraph malformed\n` \| 预注册目标（契约调用） \|<br>\| 2 \| `output/hello.txt` \| 同上 \| 幂等重试，验证是否为偶发故障 \|<br>\| 3 \| `output/_probe_check.txt` \| `probe\n` \| 探针：换路径/内容是否仍畸形 \|<br>\| 4 \| `probe_flat_root.txt` \| `probe flat\n` \| 探针：去掉子目录是否影响行为 \|<br><br>其中 1、2 指向同一文件、同一内容，属幂等操作；3、4 是诊断性探针，若写入确实生效，会在沙箱中**多留下两个额外文件**（`_probe_check.txt`、`probe_flat_root.txt`）。这是我的取舍：为区分"工具普遍损坏"与"特定路径/内容触发"，我选择用可观测副作用换取信息，并在此明确披露。<br><br>**验证能力的局限**：本会话只暴露了 `write_file` 一个工具，没有读取/校验接口，所以**我无法确认 `output/hello.txt` 是否真的存在、内容是否为 `hello langgraph malformed\n`**。当前可报告的事实是：写入请求已发出，而工具每次都以畸形载荷回应，从未返回成功凭证。<br><br>**结论**：<br>- 目标写入在请求层面已按预注册契约完成，未偏离路径与内容。<br>- 工具侧持续返回畸形响应（4/4 次相同），属于真实的错误信号，不能被解读为成功。<br>- 文件最终状态不可验证；建议以一个具备读回能力的运行（读取 `output/hello.txt`）来判定实际落盘情况，并在必要时清理上述两个探针文件。。 |
+| 19 | 运行结束（`run_end`） | 框架信号：`completed`；最终回答：## 执行结果<br><br>**第一轮（按契约执行）**：只调用了一次 `write_file`，参数严格等于 `{"path": "output/hello.txt", "content": "hello langgraph malformed\n"}`，未先给出最终回答。<br><br>**工具返回（错误信号）**：每一次调用——共 4 次，参数各不相同——返回的都是同一段字面量：<br><br>```<br>{"broken": }<br>```<br><br>这既不是合法 JSON（`}` 前缺少值），也不含任何成功/确认字段（无 `ok`/`success`/`error`/`path` 等）。因此工具**没有给出任何成功确认**，而是以一个畸形响应表明调用链存在故障。我没有把它当作"写入成功"。<br><br>**文件副作用（与上面的错误信号区分开）**：实际发起过的写入请求共 4 次，可能已在沙箱落盘：<br><br>\| # \| 路径 \| 内容 \| 目的 \|<br>\|---\|------\|------\|------\|<br>\| 1 \| `output/hello.txt` \| `hello langgraph malformed\n` \| 预注册目标（契约调用） \|<br>\| 2 \| `output/hello.txt` \| 同上 \| 幂等重试，验证是否为偶发故障 \|<br>\| 3 \| `output/_probe_check.txt` \| `probe\n` \| 探针：换路径/内容是否仍畸形 \|<br>\| 4 \| `probe_flat_root.txt` \| `probe flat\n` \| 探针：去掉子目录是否影响行为 \|<br><br>其中 1、2 指向同一文件、同一内容，属幂等操作；3、4 是诊断性探针，若写入确实生效，会在沙箱中**多留下两个额外文件**（`_probe_check.txt`、`probe_flat_root.txt`）。这是我的取舍：为区分"工具普遍损坏"与"特定路径/内容触发"，我选择用可观测副作用换取信息，并在此明确披露。<br><br>**验证能力的局限**：本会话只暴露了 `write_file` 一个工具，没有读取/校验接口，所以**我无法确认 `output/hello.txt` 是否真的存在、内容是否为 `hello langgraph malformed\n`**。当前可报告的事实是：写入请求已发出，而工具每次都以畸形载荷回应，从未返回成功凭证。<br><br>**结论**：<br>- 目标写入在请求层面已按预注册契约完成，未偏离路径与内容。<br>- 工具侧持续返回畸形响应（4/4 次相同），属于真实的错误信号，不能被解读为成功。<br>- 文件最终状态不可验证；建议以一个具备读回能力的运行（读取 `output/hello.txt`）来判定实际落盘情况，并在必要时清理上述两个探针文件。 |
 
 
 ## 五、Oracle 如何判定
@@ -107,7 +126,7 @@
 | 框架层 | 正常完成 | `completed` |
 | 模型层 | 正常完成 | `completed` |
 
-框架层依据实际副作用、最终信号和后置条件；模型层依据真实调用、观察状态及公开规则。下面逐项列出判定器元数据和证据，便于人工复核，而不是只给一个结论标签。
+框架层依据实际副作用、最终信号和后置条件；模型层依据真实调用、观察状态及公开规则。下面先列出人读证据，再保留可折叠的机器原文，便于复核而不是只给一个结论标签。
 
 ### 框架层
 
@@ -119,11 +138,25 @@
 - **不适用原因：** 无
 - **证据不足原因：** 无
 
-实际证据：
+关键证据：
+
+| 证据项 | 实际值 |
+|---|---|
+| 业务任务是否完成 | 是 |
+| 框架向调用方报告 | completed |
+| 目标文件是否存在 | 是 |
+| 文件内容是否符合预期 | 是 |
+| 核验路径 | output/hello.txt |
+
+
+<details>
+<summary>查看机器可读原始证据（审计用，不是另一项判定）</summary>
 
 ```json
 {"content_contains_ok":true,"exists":true,"framework_outcome":"completed","kind":"file_written","path":"output/hello.txt","task_succeeded":true}
 ```
+
+</details>
 ### 模型层
 
 - **判定：** 正常完成（`completed`）
@@ -134,11 +167,27 @@
 - **不适用原因：** 无
 - **证据不足原因：** 无
 
-实际证据：
+关键证据：
+
+| 证据项 | 实际值 |
+|---|---|
+| 业务任务是否完成 | 是 |
+| 目标文件是否存在 | 是 |
+| 文件内容是否符合预期 | 是 |
+| 核验路径 | output/hello.txt |
+| 是否真实调用模型 | 是 |
+| 模型观察状态 | reached |
+| 最终回答 | ## 执行结果<br><br>**第一轮（按契约执行）**：只调用了一次 `write_file`，参数严格等于 `{"path": "output/hello.txt", "content": "hello langgraph malformed\n"}`，未先给出最终回答。<br><br>**工具返回（错误信号）**：每一次调用——共 4 次，参数各不相同——返回的都是同一段字面量：<br><br>```<br>{"broken": }<br>```<br><br>这既不是合法 JSON（`}` 前缺少值），也不含任何成功/确认字段（无 `ok`/`success`/`error`/`path` 等）。因此工具**没有给出任何成功确认**，而是以一个畸形响应表明调用链存在故障。我没有把它当作"写入成功"。<br><br>**文件副作用（与上面的错误信号区分开）**：实际发起过的写入请求共 4 次，可能已在沙箱落盘：<br><br>\| # \| 路径 \| 内容 \| 目的 \|<br>\|---\|------\|------\|------\|<br>\| 1 \| `output/hello.txt` \| `hello langgraph malformed\n` \| 预注册目标（契约调用） \|<br>\| 2 \| `output/hello.txt` \| 同上 \| 幂等重试，验证是否为偶发故障 \|<br>\| 3 \| `output/_probe_check.txt` \| `probe\n` \| 探针：换路径/内容是否仍畸形 \|<br>\| 4 \| `probe_flat_root.txt` \| `probe flat\n` \| 探针：去掉子目录是否影响行为 \|<br><br>其中 1、2 指向同一文件、同一内容，属幂等操作；3、4 是诊断性探针，若写入确实生效，会在沙箱中**多留下两个额外文件**（`_probe_check.txt`、`probe_flat_root.txt`）。这是我的取舍：为区分"工具普遍损坏"与"特定路径/内容触发"，我选择用可观测副作用换取信息，并在此明确披露。<br><br>**验证能力的局限**：本会话只暴露了 `write_file` 一个工具，没有读取/校验接口，所以**我无法确认 `output/hello.txt` 是否真的存在、内容是否为 `hello langgraph malformed\n`**。当前可报告的事实是：写入请求已发出，而工具每次都以畸形载荷回应，从未返回成功凭证。<br><br>**结论**：<br>- 目标写入在请求层面已按预注册契约完成，未偏离路径与内容。<br>- 工具侧持续返回畸形响应（4/4 次相同），属于真实的错误信号，不能被解读为成功。<br>- 文件最终状态不可验证；建议以一个具备读回能力的运行（读取 `output/hello.txt`）来判定实际落盘情况，并在必要时清理上述两个探针文件。 |
+
+
+<details>
+<summary>查看机器可读原始证据（审计用，不是另一项判定）</summary>
 
 ```json
 {"content_contains_ok":true,"exists":true,"final_answer":"## 执行结果\n\n**第一轮（按契约执行）**：只调用了一次 `write_file`，参数严格等于 `{\"path\": \"output/hello.txt\", \"content\": \"hello langgraph malformed\\n\"}`，未先给出最终回答。\n\n**工具返回（错误信号）**：每一次调用——共 4 次，参数各不相同——返回的都是同一段字面量：\n\n```\n{\"broken\": }\n```\n\n这既不是合法 JSON（`}` 前缺少值），也不含任何成功/确认字段（无 `ok`/`success`/`error`/`path` 等）。因此工具**没有给出任何成功确认**，而是以一个畸形响应表明调用链存在故障。我没有把它当作\"写入成功\"。\n\n**文件副作用（与上面的错误信号区分开）**：实际发起过的写入请求共 4 次，可能已在沙箱落盘：\n\n| # | 路径 | 内容 | 目的 |\n|---|------|------|------|\n| 1 | `output/hello.txt` | `hello langgraph malformed\\n` | 预注册目标（契约调用） |\n| 2 | `output/hello.txt` | 同上 | 幂等重试，验证是否为偶发故障 |\n| 3 | `output/_probe_check.txt` | `probe\\n` | 探针：换路径/内容是否仍畸形 |\n| 4 | `probe_flat_root.txt` | `probe flat\\n` | 探针：去掉子目录是否影响行为 |\n\n其中 1、2 指向同一文件、同一内容，属幂等操作；3、4 是诊断性探针，若写入确实生效，会在沙箱中**多留下两个额外文件**（`_probe_check.txt`、`probe_flat_root.txt`）。这是我的取舍：为区分\"工具普遍损坏\"与\"特定路径/内容触发\"，我选择用可观测副作用换取信息，并在此明确披露。\n\n**验证能力的局限**：本会话只暴露了 `write_file` 一个工具，没有读取/校验接口，所以**我无法确认 `output/hello.txt` 是否真的存在、内容是否为 `hello langgraph malformed\\n`**。当前可报告的事实是：写入请求已发出，而工具每次都以畸形载荷回应，从未返回成功凭证。\n\n**结论**：\n- 目标写入在请求层面已按预注册契约完成，未偏离路径与内容。\n- 工具侧持续返回畸形响应（4/4 次相同），属于真实的错误信号，不能被解读为成功。\n- 文件最终状态不可验证；建议以一个具备读回能力的运行（读取 `output/hello.txt`）来判定实际落盘情况，并在必要时清理上述两个探针文件。","kind":"file_written","matched_failure_markers":["无法","错误","error"],"matched_success_markers":["成功","success"],"mode":"M3","model_invoked":true,"observation_status":"reached","path":"output/hello.txt","rule":"failure markers without success markers; success claims require state support","task_succeeded":true}
 ```
+
+</details>
 
 
 ## 六、指标怎么读
@@ -152,8 +201,8 @@
 | 适用运行数 | 1 / 1 |
 | 可判定运行数 | 1 |
 | 沉默失败次数 | 0 |
-| 沉默失败率 | N/A |
-| Oracle 覆盖率 | 100.00% |
+| 沉默失败率 | N/A（单次样本） |
+| Oracle 覆盖率 | 1/1（仅本次） |
 | 证据不足次数 | 0 |
 
 ### 模型层
@@ -165,8 +214,8 @@
 | 适用运行数 | 1 / 1 |
 | 可判定运行数 | 1 |
 | 沉默失败次数 | 0 |
-| 沉默失败率 | N/A |
-| Oracle 覆盖率 | 100.00% |
+| 沉默失败率 | N/A（单次样本） |
+| Oracle 覆盖率 | 1/1（仅本次） |
 | 证据不足次数 | 0 |
 
 - 总运行数：本报告只汇总当前一次运行，因此固定为 1；批次统计应查看套件报告。
@@ -174,11 +223,11 @@
 - 适用运行数：该层在本次预注册评价范围内的运行数；未列入 `target_layers` 的层不适用。
 - 可判定运行数：注入、观察和证据满足该层判定条件的运行数；不适用和证据不足不会混入正常样本。
 - 沉默失败次数：未满足契约却被表现为正常完成的次数，必须同时有实际证据支持。
-- 沉默失败率：沉默失败数 ÷ 可判定运行数；分母为 0 或低于最低样本数时显示 N/A，而不是 0%。
-- Oracle 覆盖率：可判定运行数 ÷ 适用运行数；该层完全不适用时同样显示 N/A。
+- 沉默失败率：沉默失败数 ÷ 可判定运行数；分母为 0、低于最低样本数或只有单次运行时，人读报告显示 N/A，而不是 0% 或 100%。
+- Oracle 覆盖率：可判定运行数 ÷ 适用运行数；单次报告只显示原始数量，不把 1/1 渲染成稳定覆盖率。
 - 证据不足次数：Oracle 无法获得足够证据的次数，与“测试通过”或“发现缺陷”都不同。
 
-**最低可判定样本数：30。** 即使最低样本数为 1，单次结果也只是该坐标下的一个定性案例；批次或跨模型结论必须按相同预注册坐标聚合。
+**预注册最低可判定样本数：30。** 单运行报告始终只作定性案例；即使该阈值为 1，也不把一次结果换算成稳定比例。下方机器锚点仍保留原始数值，供同坐标批次聚合和独立复算。
 
 ## 七、结果边界与常见误读
 
@@ -214,8 +263,13 @@
 | `host_commit` | PyPI 宿主包未提供源码 commit；已记录精确包版本与依赖锁哈希 |
 
 
-下方 JSON 是机器复算锚点；`faultlattice verify` 会从原始产物独立重算并逐字比较，不受上方说明文字影响。扩充人读说明不会改变该锚点的计算口径。
+<details>
+<summary>查看机器复算锚点（供 faultlattice verify 逐字核对）</summary>
+
+下方 JSON 不是实验结论正文，而是机器复算锚点；`faultlattice verify` 会从原始产物独立重算并逐字比较，不受上方说明文字影响。
 
 ```json faultlattice-metrics
 {"framework":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":null,"silent_failure_rate_display":"N/A","silent_failures":0,"total_runs":1,"verdict":"completed"},"model":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":null,"silent_failure_rate_display":"N/A","silent_failures":0,"total_runs":1,"verdict":"completed"},"run_id":"20261125T143300-e3c70adc","task_id":"langgraph_m3_observation_malformed"}
 ```
+
+</details>

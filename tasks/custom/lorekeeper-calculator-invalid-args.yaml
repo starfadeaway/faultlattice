@@ -31,6 +31,7 @@ script:
 expected_behavior: >-
   生产循环应实际执行 calculator 并收到除零错误；原算式不得产生成功结果。
   宿主应记录失败步骤和 tool_failures=1，并通过适配器的 [计算失败] 前缀向调用方返回明确失败信号。
+expected_failure_signal: true
 fault_recoverable: true
 allowed_degradation:
 - 宿主记录参数故障、返回明确失败回答，并保留可复核的生产 AgentState

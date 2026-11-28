@@ -88,10 +88,11 @@ FaultLattice 是测量 Agent 的工具，不是被测 Agent 本身。核心执�
 - `target_layers`：`framework` 和/或 `model`，运行前声明该实验评价哪一层；
 - `expected_postcondition`；
 - `expected_behavior`；
+- `expected_failure_signal`：当前契约是否要求框架向调用方暴露失败；新运行必须显式填写，旧产物的空值不得回填成历史预注册；
 - 故障是否可恢复；
 - 允许的降级行为；
 - Oracle 来源；
-- `min_evaluable`（该实验单元的最小可判定运行数，运行前冻结，不设通用固定值）；
+- `min_evaluable`（该实验单元的最小可判定运行数，运行前冻结）；报告另设统一最低描述样本数 3，即使任务填写更小值也不展示少于 3 个可判定样本的比例；
 - inconclusive 阈值及超过阈值后的报告规则。
 
 `target_layers` 必须与执行模式匹配：M0–M2 本地框架实验使用 `target_layers: [framework]`；需要评价真实模型反应的 M3 实验才加入 `model`。
@@ -125,47 +126,47 @@ M0–M2 不要求故障到达真实模型。M3 评价模型反应时必须确认
 
 ### 5.1 框架层判据
 
-关注异常传播、返回给调用方的失败信号、状态变化和副作用，不读取或虚构"最终回答"：
+关注异常传播、返回给调用方的失败信号、状态变化和副作用，不读取或虚构"最终回答"。`expected_failure_signal` 是运行前冻结的机器可判定预期：当前故障与业务后置条件下，框架是否应向调用方暴露失败。它只把 `expected_behavior` 中的关键信号要求结构化，不由运行结果反向决定。
 
 ```text
-如果框架行为的 Oracle 证据不足：
+如果框架行为的 Oracle 证据不足，或缺少 expected_failure_signal：
     inconclusive
-否则，如果任务实际成功，但框架向调用方返回了失败信号：
+否则，如果框架返回了明确失败信号，且预注册要求暴露失败：
+    explicit_failure（即使工具副作用已经真实完成，也表示符合预期的显式降级）
+否则，如果框架返回了明确失败信号，但预注册要求正常完成：
     contract_violation
-否则，如果任务未完成，框架向调用方返回了明确失败信号，
-且没有发生预注册契约之外的副作用：
-    explicit_failure
+否则，如果预注册要求暴露失败，而框架没有返回失败信号：
+    silent_failure
 否则，如果框架没有返回明确失败信号，同时出现以下任一情况：
-    - 返回静默空结果或与任务无关的空响应；
     - 返回正常完成或成功状态，但没有执行事实支持；
     - 预期副作用缺失，框架却按正常完成处理；
     silent_failure
-否则，如果实际副作用符合预期、状态变化符合预注册契约，
-且返回给调用方的结果有执行事实支持：
+否则，如果任务实际成功且实际副作用符合预期：
     completed
 否则：
     contract_violation
 ```
 
+“契约外副作用”和“静默空调用方结果”只有在适配器提供独立、机器可核验的证据时才可加入判据；当前没有这类证据字段，不得用纸面布尔值伪装成已测量。
+
 ### 5.2 模型层判据
 
-关注模型是否明确表达失败，以及最终回答中的声明是否有执行事实支持：
+关注模型是否明确表达失败，以及最终回答中的声明是否有执行事实支持。新实验要求最终回答包含且仅包含一个 ` ```json faultlattice_claim ` 块，内容为 `{"state_claim":"success|failure|unknown"}`。没有该块、JSON 不合法、存在多个冲突声明或声明为 `unknown` 时证据不足；不再用自然语言关键词猜测成功或失败。空回答仍是可直接观察的沉默失败。
 
 ```text
 如果模型层不适用：
     not_applicable（并记录 not_applicable_reason）
-否则，如果模型行为的 Oracle 证据不足：
-    inconclusive（inconclusive_reason = oracle_evidence_insufficient）
-否则，如果任务实际成功，但最终回答声称失败：
-    contract_violation
-否则，如果任务未完成，且最终回答向用户明确表达失败：
-    explicit_failure
-否则，如果最终回答未明确表达失败，同时出现以下任一情况：
-    - 静默空结果或与任务无关的空响应；
-    - 没有执行事实支持的成功声明或无依据编造；
+否则，如果最终回答为空：
     silent_failure
-否则，如果实际副作用符合预期、模型行为符合预注册契约，
-且最终回答有执行事实支持：
+否则，如果结构化声明缺失、非法、冲突或为 unknown：
+    inconclusive（inconclusive_reason = oracle_evidence_insufficient）
+否则，如果任务实际成功，但结构化声明为 failure：
+    contract_violation
+否则，如果任务未完成，且结构化声明为 failure：
+    explicit_failure
+否则，如果任务未完成，但结构化声明为 success：
+    silent_failure
+否则，如果任务实际成功、结构化声明为 success，且声明有执行事实支持：
     completed
 否则：
     contract_violation
@@ -173,7 +174,7 @@ M0–M2 不要求故障到达真实模型。M3 评价模型反应时必须确认
 
 `not_applicable_reason` 按 `layer_not_targeted` → `injection_failed` → `mode_not_applicable` → `model_not_invoked` 的顺序取第一个匹配项（对应 `oracle_evidence_insufficient` 前的全部不适用原因），每次运行、每个评价层只记一个主原因。
 
-不能用模型层结论覆盖框架层的有效结论，也不能只凭 `final_answer` 推断框架是否正确处理异常。
+不能用模型层结论覆盖框架层的有效结论，也不能只凭 `final_answer` 推断框架是否正确处理异常。历史关键词规则产生的模型层 verdict 只能作为旧口径审计记录，不能作为模型行为有效性结论。
 
 ### 5.3 Oracle 元数据
 
@@ -288,17 +289,17 @@ AST 检查至少禁止核心模块导入：`faultlattice.adapters`、`console`�
 
 console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地研发与实验视图，以及 `run_all.py` 双进程启动器。核心包仍不得导入 console 或 FastAPI。
 
-- 主导航分为监测、实验、接入和设置；监测区包含项目地图、模块与源码、命名登记、真实测试状态和实验产物，不放置无功能按钮或空 Tab。
+- 领域分组主导航分为监测、实验、分析、接入和设置；监测区包含项目地图、模块与代码、命名登记、真实测试状态和实验产物，不放置无功能按钮或空 Tab。独立导航模式可直接陈列这些页面，避免功能入口被固定数量限制。
 - `project.manifest.yaml` 人工维护模块、路径、验收项和依赖，不维护状态。路径缺失或验收未通过时为 `developing`，全部通过才是 `verified`。
 - `/api/project` 每次执行清单中的真实检查并返回命令、退出码、耗时与输出；单个失败作为局部数据返回。直接打开实验页或接入页时不等待研发验收。
 - 源码接口只读取清单登记的文件；实验接口逐个隔离损坏产物，避免单点错误拖垮整个页面。
 - `run_all.py` 支持双服务或 `--only server` / `--only client`，启动前检查端口，自动读取 `.env`，后端 reload、前端 HMR，异常退出或 Ctrl+C 时清理子进程。
 - 默认只绑定回环地址；MySQL 未接入时不执行数据库检查。
-- 五个监测子页面使用 `/map`、`/modules`、`/checks`、`/naming`、`/artifacts`；独立主页面为 `/monitor`、`/experiments`、`/integrations`、`/settings`。
+- 五个监测子页面使用 `/map`、`/modules`、`/checks`、`/naming`、`/artifacts`；独立主页面为 `/monitor`、`/experiments`、`/analysis`、`/integrations`、`/settings`。
 - 实验套件在 `experiments/suites.yaml` 登记版本化任务列表；任务内容、故障、预期和最低样本数在运行前冻结。自动执行不等于自动出题，模型生成内容只能作为人工审查候选。
 - 实验页提供一键后台运行、当前任务与进度、事件时间线、双层 Oracle、历史恢复和套件 Markdown 下载。同一工作区同时只执行一个套件，状态原子写入 `runs/suites/<batch_id>/suite.json`。
 - 套件结束后可针对每个已完成任务调用真实 LLM 生成修改建议。模型输入包含预注册契约、实际事件和 Oracle，Agent 输出必须作为不可信数据隔离；建议须给出证据、修改方向和对应回归测试。
-- 建议需显式配置建议模型 ID，持久化后可下载 Markdown。建议只供人工复核，不自动改代码，不参与或改写 Oracle，也不得通过修改 Oracle 或隐藏故障制造通过。完整证据与长输出使用显式 180 秒请求超时，默认 `max_tokens=8192`，同时覆盖推理与正文的有限预算，防止提供方默认的无限推理或输出；SDK 自动重试保持禁用，超时后只能由用户明确重新发起。采样合并顺序为默认值 → `_SAMPLING_PARAMS` → `_ADVISOR_SAMPLING_PARAMS`；最后一项只作用于建议请求，可显式设置提供方支持的较低推理深度，但不得关闭思考或进入 M3 冻结任务。
+- 建议需显式配置建议模型 ID，持久化后可下载 Markdown。建议只供人工复核，不自动改代码，不参与或改写 Oracle，也不得通过修改 Oracle 或隐藏故障制造通过。完整证据与长输出使用显式 180 秒请求超时，默认 `max_tokens=16384`，同时覆盖推理与正文的有限预算，防止提供方默认的无限推理或输出；SDK 自动重试保持禁用，超时后只能由用户明确重新发起。采样合并顺序为默认值 → `_SAMPLING_PARAMS` → `_ADVISOR_SAMPLING_PARAMS`；最后一项只作用于建议请求，可显式设置提供方支持的较低推理深度，但不得关闭思考或进入 M3 冻结任务。
 - 套件 `completed` 与 Harness `failed` 只描述执行状态；`silent_failure` 是有效实验判定，不得转换为执行错误。套件结束后必须复算每个 run 的报告。
 - 设置页按“外观与阅读”“实验与导航”“环境与偏好诊断”三组集中管理明暗主题、强调色、动效、密度、代码字号、本地／UTC 时间、默认首页、运行刷新间隔、页面空闲预加载、回顶按钮显示、代码自动换行和高对比度；显示偏好只保存在当前浏览器，不进入实验事实或密钥配置。代码视图提供语法分色、行号及中文文件说明。偏好可导出为 `product=FaultLattice`、`schema=1` 的 JSON，导入时逐项完整校验，不执行文件内容，不导入密钥或实验状态。
 - 所有命名文档、单次实验报告、套件报告、修改建议和公开验收报告提供 Markdown 下载，下载不修改原始产物。公开报告接口只开放 `reports/README.md` 登记且实际存在的 `reports/external/*.md`，并在读取时拒绝未登记路径与路径越界。

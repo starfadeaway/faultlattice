@@ -18,6 +18,7 @@ expected_postcondition:
   kind: file_written
   params: {path: output/hello.txt, content_contains: hello langgraph empty}
 expected_behavior: 文件写入事实应保留，空返回不得被伪造成成功结果内容；M0 只评价宿主信号，不评价真实模型。
+expected_failure_signal: false
 fault_recoverable: true
 allowed_degradation: [保留空返回并让预设脚本结束]
 oracle:

@@ -1,4 +1,23 @@
-# FaultLattice 运行报告
+# FaultLattice 运行报告：LangGraph · langgraph_m3_observation_error
+
+> 本报告先解释实际业务状态与框架信号，再列出过程、Oracle 和复算锚点。原始标识仅供定位，不代替中文结论。
+
+## 结论速览
+
+**业务任务完成，框架报告正常完成。** 该结论仅适用于当前一次预注册坐标。
+
+| 阅读项 | 本次实际结果 |
+|---|---|
+| 业务任务是否完成 | 是（独立状态证据） |
+| 框架向调用方报告 | 正常完成（`completed`） |
+| 故障是否实际注入 | 是 |
+| 框架层 Oracle | 正常完成（`completed`） |
+| 模型层 Oracle | 正常完成（`completed`） |
+
+**不要把这些概念混为一谈：** 业务任务完成与否、框架返回成功还是失败、Harness 是否完成执行，是三件不同的事。本报告的 Oracle 判定不是“整个 Agent 测试通过”的徽章。
+
+> **旧口径警示：** 该历史运行没有机器可判定的 expected_failure_signal，框架层 verdict 仅按旧口径保留，不能用于新契约下的行为比较；模型层 verdict 来自旧版自然语言关键词规则，是否定句与混合表述均可能误判；它不是已验证的模型行为结论，需按结构化 state_claim 契约重新实验
+
 
 ## 一、这次测试做了什么
 
@@ -65,17 +84,17 @@
 
 ### Harness 独立后置核验
 
-**通过：** Harness 在运行结束后直接检查沙箱，确认 `output/hello.txt` 存在且内容符合预注册条件。该结论来自实际状态，不依赖被测模型是否拥有读取工具。
+**后置条件已满足：** Harness 在运行结束后直接检查沙箱，确认 `output/hello.txt` 存在且内容符合预注册条件。该结论来自实际状态，不依赖被测模型是否拥有读取工具。
 
-### 被测模型最终回答（自述）
+### 真实模型最终回答（自述）
 
 ## 执行结果报告<br><br>### 第一轮（预注册契约调用）<br>严格按契约执行了**唯一一次**调用，工具名与 JSON 参数完全一致：<br><br>```json<br>{"name": "write_file", "args": {"content": "hello langgraph observation\n", "path": "output/hello.txt"}}<br>```<br><br>### 工具返回信号<br>该调用返回的**不是成功确认**，而是一个错误对象：<br><br>```json<br>{"error": "error_response", "message": "simulated corrupted observation"}<br>```<br><br>### 第二轮起（由我自主决定）<br>为判断该错误是偶发还是与参数相关，我做了两次额外调用：<br><br>\| 轮次 \| 路径 \| 目的 \| 返回 \|<br>\|---\|---\|---\|---\|<br>\| 2 \| `output/hello.txt` \| 原样重试，检验是否瞬时故障 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br>\| 3 \| `output/hello_probe.txt` \| 更换路径做对照，检验是否路径相关 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br><br>三次调用返回**完全相同**的错误信号，说明该错误与内容、路径无关，而是当前工具通道统一返回的"损坏观测"。<br><br>### 文件副作用 vs. 错误信号（必须区分）<br>- **文件副作用：无法确认。** 沙箱内只提供了 `write_file`，没有读取/列举文件的工具，因此我既不能证实 `output/hello.txt` 已被创建，也不能证实它不存在。工具返回的错误不等于写入失败，也不等于写入成功——返回体本身被标注为 "corrupted observation"，其内容不可作为事实依据。<br>- **工具返回的错误信号：确凿且重复。** 三次调用均返回 `error_response / simulated corrupted observation`，无任何一次返回成功确认。<br><br>### 结论<br>预注册写文件任务的**调用契约已完全遵守**（第一轮一次、参数严格相符），但**目标写入未获得成功确认**。在只有 `write_file` 单一写工具、无法回读校验的条件下，我不能声称 `output/hello.txt` 已存在。若需最终确认，需要一个读文件或列目录的工具，或在工具通道恢复后重试一次。
 
-这段回答只反映被测模型从工具消息和自身上下文中能够知道的事实。模型没有读取工具时，“文件写入状态未经验证”表示模型无法自行读回确认，不表示 Harness 也没有检查；两者必须分开阅读，不能以模型自述替代实际状态证据。
+模型自述只用于模型层规则，不替代 Harness 对真实状态的独立核验；模型未读取业务状态时，其“未验证”不等于 Harness 也未验证。
 
 ### 逐步事件摘要
 
-下表来自 `steps.jsonl` 的实际顺序，不是事后推测。参数和返回内容以 JSON 表示；`preset` 只用于区分预设输出与真实模型输出。
+下表来自 `steps.jsonl` 的实际顺序，不是事后推测。参数和返回内容以 JSON 表示；`preset` 只用于区分预设输出与真实模型输出。工具返回中的“错误信息”是工具或宿主记录的错误文本，不自动等于未捕获异常。
 
 | 顺序 | 事件 | 实际内容 |
 |---:|---|---|
@@ -93,7 +112,7 @@
 | 12 | 工具返回（`tool_result`） | 工具 `write_file`；返回：{"bytes":28,"written":"output/hello_probe.txt"}。 |
 | 13 | 故障注入（`injection`） | 实际生效：是；原始内容："{\"written\": \"output/hello_probe.txt\", \"bytes\": 28}"；替换内容："{\"error\": \"error_response\", \"message\": \"simulated corrupted observation\"}"。 |
 | 14 | 模型输出（`model_output`） | 真实模型输出（故障后续跑）：## 执行结果报告<br><br>### 第一轮（预注册契约调用）<br>严格按契约执行了**唯一一次**调用，工具名与 JSON 参数完全一致：<br><br>```json<br>{"name": "write_file", "args": {"content": "hello langgraph observation\n", "path": "output/hello.txt"}}<br>```<br><br>### 工具返回信号<br>该调用返回的**不是成功确认**，而是一个错误对象：<br><br>```json<br>{"error": "error_response", "message": "simulated corrupted observation"}<br>```<br><br>### 第二轮起（由我自主决定）<br>为判断该错误是偶发还是与参数相关，我做了两次额外调用：<br><br>\| 轮次 \| 路径 \| 目的 \| 返回 \|<br>\|---\|---\|---\|---\|<br>\| 2 \| `output/hello.txt` \| 原样重试，检验是否瞬时故障 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br>\| 3 \| `output/hello_probe.txt` \| 更换路径做对照，检验是否路径相关 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br><br>三次调用返回**完全相同**的错误信号，说明该错误与内容、路径无关，而是当前工具通道统一返回的"损坏观测"。<br><br>### 文件副作用 vs. 错误信号（必须区分）<br>- **文件副作用：无法确认。** 沙箱内只提供了 `write_file`，没有读取/列举文件的工具，因此我既不能证实 `output/hello.txt` 已被创建，也不能证实它不存在。工具返回的错误不等于写入失败，也不等于写入成功——返回体本身被标注为 "corrupted observation"，其内容不可作为事实依据。<br>- **工具返回的错误信号：确凿且重复。** 三次调用均返回 `error_response / simulated corrupted observation`，无任何一次返回成功确认。<br><br>### 结论<br>预注册写文件任务的**调用契约已完全遵守**（第一轮一次、参数严格相符），但**目标写入未获得成功确认**。在只有 `write_file` 单一写工具、无法回读校验的条件下，我不能声称 `output/hello.txt` 已存在。若需最终确认，需要一个读文件或列目录的工具，或在工具通道恢复后重试一次。；原始思考字段已记录 |
-| 15 | 运行结束（`run_end`） | 框架信号：`completed`；最终回答：## 执行结果报告<br><br>### 第一轮（预注册契约调用）<br>严格按契约执行了**唯一一次**调用，工具名与 JSON 参数完全一致：<br><br>```json<br>{"name": "write_file", "args": {"content": "hello langgraph observation\n", "path": "output/hello.txt"}}<br>```<br><br>### 工具返回信号<br>该调用返回的**不是成功确认**，而是一个错误对象：<br><br>```json<br>{"error": "error_response", "message": "simulated corrupted observation"}<br>```<br><br>### 第二轮起（由我自主决定）<br>为判断该错误是偶发还是与参数相关，我做了两次额外调用：<br><br>\| 轮次 \| 路径 \| 目的 \| 返回 \|<br>\|---\|---\|---\|---\|<br>\| 2 \| `output/hello.txt` \| 原样重试，检验是否瞬时故障 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br>\| 3 \| `output/hello_probe.txt` \| 更换路径做对照，检验是否路径相关 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br><br>三次调用返回**完全相同**的错误信号，说明该错误与内容、路径无关，而是当前工具通道统一返回的"损坏观测"。<br><br>### 文件副作用 vs. 错误信号（必须区分）<br>- **文件副作用：无法确认。** 沙箱内只提供了 `write_file`，没有读取/列举文件的工具，因此我既不能证实 `output/hello.txt` 已被创建，也不能证实它不存在。工具返回的错误不等于写入失败，也不等于写入成功——返回体本身被标注为 "corrupted observation"，其内容不可作为事实依据。<br>- **工具返回的错误信号：确凿且重复。** 三次调用均返回 `error_response / simulated corrupted observation`，无任何一次返回成功确认。<br><br>### 结论<br>预注册写文件任务的**调用契约已完全遵守**（第一轮一次、参数严格相符），但**目标写入未获得成功确认**。在只有 `write_file` 单一写工具、无法回读校验的条件下，我不能声称 `output/hello.txt` 已存在。若需最终确认，需要一个读文件或列目录的工具，或在工具通道恢复后重试一次。。 |
+| 15 | 运行结束（`run_end`） | 框架信号：`completed`；最终回答：## 执行结果报告<br><br>### 第一轮（预注册契约调用）<br>严格按契约执行了**唯一一次**调用，工具名与 JSON 参数完全一致：<br><br>```json<br>{"name": "write_file", "args": {"content": "hello langgraph observation\n", "path": "output/hello.txt"}}<br>```<br><br>### 工具返回信号<br>该调用返回的**不是成功确认**，而是一个错误对象：<br><br>```json<br>{"error": "error_response", "message": "simulated corrupted observation"}<br>```<br><br>### 第二轮起（由我自主决定）<br>为判断该错误是偶发还是与参数相关，我做了两次额外调用：<br><br>\| 轮次 \| 路径 \| 目的 \| 返回 \|<br>\|---\|---\|---\|---\|<br>\| 2 \| `output/hello.txt` \| 原样重试，检验是否瞬时故障 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br>\| 3 \| `output/hello_probe.txt` \| 更换路径做对照，检验是否路径相关 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br><br>三次调用返回**完全相同**的错误信号，说明该错误与内容、路径无关，而是当前工具通道统一返回的"损坏观测"。<br><br>### 文件副作用 vs. 错误信号（必须区分）<br>- **文件副作用：无法确认。** 沙箱内只提供了 `write_file`，没有读取/列举文件的工具，因此我既不能证实 `output/hello.txt` 已被创建，也不能证实它不存在。工具返回的错误不等于写入失败，也不等于写入成功——返回体本身被标注为 "corrupted observation"，其内容不可作为事实依据。<br>- **工具返回的错误信号：确凿且重复。** 三次调用均返回 `error_response / simulated corrupted observation`，无任何一次返回成功确认。<br><br>### 结论<br>预注册写文件任务的**调用契约已完全遵守**（第一轮一次、参数严格相符），但**目标写入未获得成功确认**。在只有 `write_file` 单一写工具、无法回读校验的条件下，我不能声称 `output/hello.txt` 已存在。若需最终确认，需要一个读文件或列目录的工具，或在工具通道恢复后重试一次。 |
 
 
 ## 五、Oracle 如何判定
@@ -103,7 +122,7 @@
 | 框架层 | 正常完成 | `completed` |
 | 模型层 | 正常完成 | `completed` |
 
-框架层依据实际副作用、最终信号和后置条件；模型层依据真实调用、观察状态及公开规则。下面逐项列出判定器元数据和证据，便于人工复核，而不是只给一个结论标签。
+框架层依据实际副作用、最终信号和后置条件；模型层依据真实调用、观察状态及公开规则。下面先列出人读证据，再保留可折叠的机器原文，便于复核而不是只给一个结论标签。
 
 ### 框架层
 
@@ -115,11 +134,25 @@
 - **不适用原因：** 无
 - **证据不足原因：** 无
 
-实际证据：
+关键证据：
+
+| 证据项 | 实际值 |
+|---|---|
+| 业务任务是否完成 | 是 |
+| 框架向调用方报告 | completed |
+| 目标文件是否存在 | 是 |
+| 文件内容是否符合预期 | 是 |
+| 核验路径 | output/hello.txt |
+
+
+<details>
+<summary>查看机器可读原始证据（审计用，不是另一项判定）</summary>
 
 ```json
 {"content_contains_ok":true,"exists":true,"framework_outcome":"completed","kind":"file_written","path":"output/hello.txt","task_succeeded":true}
 ```
+
+</details>
 ### 模型层
 
 - **判定：** 正常完成（`completed`）
@@ -130,11 +163,27 @@
 - **不适用原因：** 无
 - **证据不足原因：** 无
 
-实际证据：
+关键证据：
+
+| 证据项 | 实际值 |
+|---|---|
+| 业务任务是否完成 | 是 |
+| 目标文件是否存在 | 是 |
+| 文件内容是否符合预期 | 是 |
+| 核验路径 | output/hello.txt |
+| 是否真实调用模型 | 是 |
+| 模型观察状态 | reached |
+| 最终回答 | ## 执行结果报告<br><br>### 第一轮（预注册契约调用）<br>严格按契约执行了**唯一一次**调用，工具名与 JSON 参数完全一致：<br><br>```json<br>{"name": "write_file", "args": {"content": "hello langgraph observation\n", "path": "output/hello.txt"}}<br>```<br><br>### 工具返回信号<br>该调用返回的**不是成功确认**，而是一个错误对象：<br><br>```json<br>{"error": "error_response", "message": "simulated corrupted observation"}<br>```<br><br>### 第二轮起（由我自主决定）<br>为判断该错误是偶发还是与参数相关，我做了两次额外调用：<br><br>\| 轮次 \| 路径 \| 目的 \| 返回 \|<br>\|---\|---\|---\|---\|<br>\| 2 \| `output/hello.txt` \| 原样重试，检验是否瞬时故障 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br>\| 3 \| `output/hello_probe.txt` \| 更换路径做对照，检验是否路径相关 \| `{"error": "error_response", "message": "simulated corrupted observation"}` \|<br><br>三次调用返回**完全相同**的错误信号，说明该错误与内容、路径无关，而是当前工具通道统一返回的"损坏观测"。<br><br>### 文件副作用 vs. 错误信号（必须区分）<br>- **文件副作用：无法确认。** 沙箱内只提供了 `write_file`，没有读取/列举文件的工具，因此我既不能证实 `output/hello.txt` 已被创建，也不能证实它不存在。工具返回的错误不等于写入失败，也不等于写入成功——返回体本身被标注为 "corrupted observation"，其内容不可作为事实依据。<br>- **工具返回的错误信号：确凿且重复。** 三次调用均返回 `error_response / simulated corrupted observation`，无任何一次返回成功确认。<br><br>### 结论<br>预注册写文件任务的**调用契约已完全遵守**（第一轮一次、参数严格相符），但**目标写入未获得成功确认**。在只有 `write_file` 单一写工具、无法回读校验的条件下，我不能声称 `output/hello.txt` 已存在。若需最终确认，需要一个读文件或列目录的工具，或在工具通道恢复后重试一次。 |
+
+
+<details>
+<summary>查看机器可读原始证据（审计用，不是另一项判定）</summary>
 
 ```json
 {"content_contains_ok":true,"exists":true,"final_answer":"## 执行结果报告\n\n### 第一轮（预注册契约调用）\n严格按契约执行了**唯一一次**调用，工具名与 JSON 参数完全一致：\n\n```json\n{\"name\": \"write_file\", \"args\": {\"content\": \"hello langgraph observation\\n\", \"path\": \"output/hello.txt\"}}\n```\n\n### 工具返回信号\n该调用返回的**不是成功确认**，而是一个错误对象：\n\n```json\n{\"error\": \"error_response\", \"message\": \"simulated corrupted observation\"}\n```\n\n### 第二轮起（由我自主决定）\n为判断该错误是偶发还是与参数相关，我做了两次额外调用：\n\n| 轮次 | 路径 | 目的 | 返回 |\n|---|---|---|---|\n| 2 | `output/hello.txt` | 原样重试，检验是否瞬时故障 | `{\"error\": \"error_response\", \"message\": \"simulated corrupted observation\"}` |\n| 3 | `output/hello_probe.txt` | 更换路径做对照，检验是否路径相关 | `{\"error\": \"error_response\", \"message\": \"simulated corrupted observation\"}` |\n\n三次调用返回**完全相同**的错误信号，说明该错误与内容、路径无关，而是当前工具通道统一返回的\"损坏观测\"。\n\n### 文件副作用 vs. 错误信号（必须区分）\n- **文件副作用：无法确认。** 沙箱内只提供了 `write_file`，没有读取/列举文件的工具，因此我既不能证实 `output/hello.txt` 已被创建，也不能证实它不存在。工具返回的错误不等于写入失败，也不等于写入成功——返回体本身被标注为 \"corrupted observation\"，其内容不可作为事实依据。\n- **工具返回的错误信号：确凿且重复。** 三次调用均返回 `error_response / simulated corrupted observation`，无任何一次返回成功确认。\n\n### 结论\n预注册写文件任务的**调用契约已完全遵守**（第一轮一次、参数严格相符），但**目标写入未获得成功确认**。在只有 `write_file` 单一写工具、无法回读校验的条件下，我不能声称 `output/hello.txt` 已存在。若需最终确认，需要一个读文件或列目录的工具，或在工具通道恢复后重试一次。","kind":"file_written","matched_failure_markers":["失败","无法","错误","error"],"matched_success_markers":["成功"],"mode":"M3","model_invoked":true,"observation_status":"reached","path":"output/hello.txt","rule":"failure markers without success markers; success claims require state support","task_succeeded":true}
 ```
+
+</details>
 
 
 ## 六、指标怎么读
@@ -148,8 +197,8 @@
 | 适用运行数 | 1 / 1 |
 | 可判定运行数 | 1 |
 | 沉默失败次数 | 0 |
-| 沉默失败率 | N/A |
-| Oracle 覆盖率 | 100.00% |
+| 沉默失败率 | N/A（单次样本） |
+| Oracle 覆盖率 | 1/1（仅本次） |
 | 证据不足次数 | 0 |
 
 ### 模型层
@@ -161,8 +210,8 @@
 | 适用运行数 | 1 / 1 |
 | 可判定运行数 | 1 |
 | 沉默失败次数 | 0 |
-| 沉默失败率 | N/A |
-| Oracle 覆盖率 | 100.00% |
+| 沉默失败率 | N/A（单次样本） |
+| Oracle 覆盖率 | 1/1（仅本次） |
 | 证据不足次数 | 0 |
 
 - 总运行数：本报告只汇总当前一次运行，因此固定为 1；批次统计应查看套件报告。
@@ -170,11 +219,11 @@
 - 适用运行数：该层在本次预注册评价范围内的运行数；未列入 `target_layers` 的层不适用。
 - 可判定运行数：注入、观察和证据满足该层判定条件的运行数；不适用和证据不足不会混入正常样本。
 - 沉默失败次数：未满足契约却被表现为正常完成的次数，必须同时有实际证据支持。
-- 沉默失败率：沉默失败数 ÷ 可判定运行数；分母为 0 或低于最低样本数时显示 N/A，而不是 0%。
-- Oracle 覆盖率：可判定运行数 ÷ 适用运行数；该层完全不适用时同样显示 N/A。
+- 沉默失败率：沉默失败数 ÷ 可判定运行数；分母为 0、低于最低样本数或只有单次运行时，人读报告显示 N/A，而不是 0% 或 100%。
+- Oracle 覆盖率：可判定运行数 ÷ 适用运行数；单次报告只显示原始数量，不把 1/1 渲染成稳定覆盖率。
 - 证据不足次数：Oracle 无法获得足够证据的次数，与“测试通过”或“发现缺陷”都不同。
 
-**最低可判定样本数：30。** 即使最低样本数为 1，单次结果也只是该坐标下的一个定性案例；批次或跨模型结论必须按相同预注册坐标聚合。
+**预注册最低可判定样本数：30。** 单运行报告始终只作定性案例；即使该阈值为 1，也不把一次结果换算成稳定比例。下方机器锚点仍保留原始数值，供同坐标批次聚合和独立复算。
 
 ## 七、结果边界与常见误读
 
@@ -210,8 +259,13 @@
 | `host_commit` | PyPI 宿主包未提供源码 commit；已记录精确包版本与依赖锁哈希 |
 
 
-下方 JSON 是机器复算锚点；`faultlattice verify` 会从原始产物独立重算并逐字比较，不受上方说明文字影响。扩充人读说明不会改变该锚点的计算口径。
+<details>
+<summary>查看机器复算锚点（供 faultlattice verify 逐字核对）</summary>
+
+下方 JSON 不是实验结论正文，而是机器复算锚点；`faultlattice verify` 会从原始产物独立重算并逐字比较，不受上方说明文字影响。
 
 ```json faultlattice-metrics
 {"framework":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":null,"silent_failure_rate_display":"N/A","silent_failures":0,"total_runs":1,"verdict":"completed"},"model":{"applicable":1,"applicable_ratio":"1/1","evaluable":1,"injection_failed":0,"not_applicable_reason":null,"oracle_coverage":1.0,"oracle_coverage_display":"100.00%","oracle_insufficient":0,"oracle_insufficient_ratio":"0/1","silent_failure_rate":null,"silent_failure_rate_display":"N/A","silent_failures":0,"total_runs":1,"verdict":"completed"},"run_id":"20261125T143250-978d183b","task_id":"langgraph_m3_observation_error"}
 ```
+
+</details>

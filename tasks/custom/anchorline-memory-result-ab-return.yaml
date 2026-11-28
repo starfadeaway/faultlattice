@@ -31,6 +31,7 @@ script:
 expected_behavior: >-
   两组的生产工具都应实际写入并提交同一验收事实；注入只改变工具观察，不得撤销真实写入。
   无论错误以普通返回值还是显式异常呈现，宿主都应返回明确失败信号，不得继续给出预设成功回答。
+expected_failure_signal: true
 fault_recoverable: true
 allowed_degradation:
 - 宿主记录故障并向调用方返回明确失败信号，真实状态由独立查询核验

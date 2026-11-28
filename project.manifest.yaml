@@ -28,11 +28,11 @@ checks:
     name: MySQL 事务与 LanceDB 相似检索测试
     command: [python, -m, pytest, tests/meta/test_indexing.py, tests/adapters/test_mysql_index.py, tests/adapters/test_lance_similarity.py, tests/adapters/test_openai_embedding.py, tests/e2e/test_similarity_cli_e2e.py, -q]
   quality-gate:
-    name: 公开样例 CI 回归质量门禁
-    command: [faultlattice, quality-gate, runs/_sample/20261124T124335-94ebab0a, --baseline, quality/public-sample.yaml, --output, runs/quality-gate.md]
+    name: 确定性本地行为回归（现场生成 current）
+    command: [python, scripts/check_public_regression.py, --baseline, quality/public-sample.yaml, --output, reports/quality-gate.md]
   external-quality-gate:
-    name: 外部 Agent M0 公开样例回归质量门禁
-    command: [faultlattice, quality-gate, runs/_sample/20261127T131928-4a109d3f, runs/_sample/20261126T175052-1730a492, runs/_sample/20261127T131958-b5e13aff, runs/_sample/20261126T180523-058c206a, runs/_sample/20261127T145247-77cdae58, runs/_sample/20261127T145248-20a065b6, --baseline, quality/external-agent-m0.yaml, --output, runs/external-agent-quality-gate.md]
+    name: 外部 Agent 公开产物完整性复算
+    command: [python, -m, pytest, tests/meta/test_public_samples.py, -q]
   ruff:
     name: Ruff 静态检查
     command: [python, -m, ruff, check, .]
@@ -106,7 +106,7 @@ modules:
 
   - id: quality-gate
     name: CI 回归质量门禁
-    source_paths: [src/faultlattice/quality.py, src/faultlattice/cli.py, quality/public-sample.yaml, quality/external-agent-m0.yaml]
+    source_paths: [src/faultlattice/quality.py, src/faultlattice/cli.py, scripts/check_public_regression.py, quality/public-sample.yaml, quality/external-agent-m0.yaml]
     test_paths: [tests/meta/test_quality_gate.py, tests/e2e/test_quality_gate_cli_e2e.py]
     required_checks: [quality-gate, external-quality-gate, core-tests, cli-e2e, ruff, pyright]
     dependencies: [core, cli]

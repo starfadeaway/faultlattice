@@ -22,6 +22,7 @@ script:
 expected_behavior: >-
   生产循环应使用未经修改的原算式实际执行 calculator 并收到成功结果。
   AgentState 应留下一个成功步骤且 tool_failures=0，宿主应向调用方报告完成；不得出现注入事件。
+expected_failure_signal: false
 fault_recoverable: false
 allowed_degradation: []
 oracle:

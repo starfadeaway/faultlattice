@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import JSONResponse
 
 from console.server.authoring import (
     AdapterDraftRequest,
@@ -36,6 +39,21 @@ external_agent_service = ExternalAgentService(ROOT)
 task_authoring_service = TaskAuthoringService(ROOT, external_agent_service)
 ai_authoring_service = AIAuthoringService(ROOT, task_authoring_service)
 app = FastAPI(title="FaultLattice Console", version="0.1.0")
+# 仅绑定回环地址仍不足以抵抗 DNS rebinding；同时限制 Host 与写请求 Origin。
+# testserver 是 FastAPI TestClient 的保留本机测试域名，不用于实际部署。
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["127.0.0.1", "localhost", "testserver"],
+)
+
+
+@app.middleware("http")
+async def local_write_origin(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if origin and urlsplit(origin).hostname not in {"127.0.0.1", "localhost"}:
+            return JSONResponse(status_code=403, content={"detail": "只允许本机来源的写操作"})
+    return await call_next(request)
 
 
 class RunSuiteRequest(BaseModel):
@@ -225,12 +243,11 @@ def register_external_agent(request: ExternalAgentRegisterRequest) -> dict:
 @app.post("/api/external-agents/{agent_id}/preflight")
 def preflight_external_agent(agent_id: str) -> dict:
     try:
-        registration = next((item for item in external_agent_service.list() if item["id"] == agent_id), None)
-        if registration is None:
-            raise HTTPException(status_code=404, detail=f"未知外部 Agent: {agent_id}")
-        if registration["status"] != "ready":
-            raise ConfigurationError(registration["error"] or "外部适配器预检失败")
-        return registration
+        # 只对用户显式选择的适配器执行真实加载，不遍历执行其他宿主。
+        return external_agent_service.preflight(agent_id)
+    except ConfigurationError as exc:
+        status = 404 if str(exc).startswith("未知外部 Agent:") else 409
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
     except FaultLatticeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
