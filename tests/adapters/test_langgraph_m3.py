@@ -159,6 +159,29 @@ def test_m3_rejects_mismatched_real_prefix_before_tool_execution(tmp_path: Path)
     assert len(provider.calls) == 1
 
 
+def test_m3_missing_target_newline_is_not_autocorrected(tmp_path: Path) -> None:
+    class MissingNewlineProvider(FakeProvider):
+        def generate(self, messages, *, tools) -> ModelResponse:
+            self.calls.append({"messages": messages, "tools": tools})
+            target = PREFIX[0]["tool_call"]
+            arguments = dict(target["args"])
+            arguments["content"] = arguments["content"].removesuffix("\n")
+            return ModelResponse(
+                content="",
+                tool_calls=[ModelToolCall(id="missing-newline", name=target["name"], args=arguments)],
+                reasoning_content="真实前缀思考",
+            )
+
+    provider = MissingNewlineProvider()
+    with pytest.raises(ReplayError, match="完全一致"):
+        LanggraphHost().run_counterfactual(
+            PREFIX, fault=_fault(), sandbox=tmp_path, model_provider=provider
+        )
+
+    assert len(provider.calls) == 1
+    assert not (tmp_path / "output" / "hello.txt").exists()
+
+
 def test_m3_rejects_missing_thinking_field_before_tool_execution(tmp_path: Path) -> None:
     provider = FakeProvider(reasoning_content=None, requires_reasoning_content=True)
     with pytest.raises(ModelProviderError, match="不会伪造该字段或关闭思考模式"):
@@ -228,6 +251,8 @@ def test_m3_precall_contract_removes_tools_and_blocks_extra_write(tmp_path: Path
     assert "【状态声明格式｜以下易错点从第一轮起生效】" in system
     assert "不得调用 final_answer" in system
     assert "字符串末尾换行 \\n" in system
+    assert "上方契约中若出现 \\n" in system
+    assert "不得让序列化器或人工整理删掉它" in system
     assert '"content": "hello m3\\n"' in system
     assert "不得重试相同参数或不同参数" in system
     assert "不得创建探针文件" in system

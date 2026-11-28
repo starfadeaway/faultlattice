@@ -421,6 +421,7 @@ LLM 修改建议接口为 `POST /api/experiments/history/{batch_id}/tasks/{task_
 - M3 模型桥接名称为 `StructuredLiveModel`，结构化记忆宿主为 `StructuredMemoryAgent`。后者只用于 M3，保留真实 assistant 工具调用、工具观察的 `tool_call_id` 与原始 `reasoning_content`；M0–M2 继续使用 smolagents 默认文本记忆。
 - smolagents M3 任务登记为 `smolagents_m3_error_continuation` 与 `smolagents_m3_observation_error`，套件 ID 为 `smolagents-m3`。首轮目标调用不匹配、思考字段缺失或提供方请求失败时，在工具执行前按 Harness 错误终止，不静默重试或降级。
 - M3 首轮向模型提供 `write_file` 与 `final_answer`，续跑只提供 `final_answer`，并明确要求必须调用一次该工具、不得以普通文本结束。若仍返回业务工具调用，则在宿主执行前阻断，记录 `blocked_tool_calls` 与 `continuation_tool_policy=final_answer_only` 并抛出 `ReplayError`，不重试、不执行额外副作用。
+- 续跑的 `final_answer` 必须是原生 `tool_calls` 中唯一调用，参数只含字符串 `answer`；普通文本、`Action:`、DSML 或 XML 模拟调用均不合格。结构不符时记录 `model_output.continuation_protocol_error=native_final_answer_tool_call_required`，保留原始 `content`，立即抛出 `ReplayError`，不解析成成功回答、不补造工具调用，也不再进入会产生无调用 ID 伪观察的额外记忆轮次。首轮提示还须明确：目标 JSON 中若出现 `\n`，它是参数字符串的一部分，禁止序列化或人工整理时删除；前缀不匹配仍严格终止，不能自动补齐。
 - M3 最终回答通过宿主真实 `final_answer` 工具结束；`model_output.content` 仍保存提供方原始正文，不把工具参数中的 answer 伪装成普通正文。完整回答同时出现在 `final_answer` 工具调用和 `run_end.final_answer` 中。
 
 smolagents 的 M0 结果只评价框架。即使预设最终回答写着“已写入”，也不能把它当成真实模型在故障后的回答。M3 伪模型测试只证明协议接线，真实模型行为必须通过对应预注册任务另行验收。

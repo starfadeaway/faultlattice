@@ -358,5 +358,48 @@ def test_m3_precall_contract_only_exposes_final_answer_and_blocks_probe(
     assert '```json\n{"state_claim":"failure","reason":"工具返回错误"}\n```' in prompt
     assert "【smolagents 第二轮终答协议】" in prompt
     assert "不得以普通文本结束" in prompt
+    assert "原生 tool_calls" in prompt
+    assert "Action:" in prompt and "DSML" in prompt
     assert (tmp_path / "output" / "hello.txt").is_file()
     assert not (tmp_path / "output" / "probe.txt").exists()
+
+
+def test_m3_plain_text_dsml_continuation_fails_before_extra_memory_round(
+    tmp_path: Path,
+) -> None:
+    class DsmlTextProvider(FakeProvider):
+        def generate(self, messages, *, tools) -> ModelResponse:
+            response = super().generate(messages, tools=tools)
+            if len(self.messages) == 1:
+                return response
+            return ModelResponse.model_validate({
+                "content": (
+                    'Action:\n{"name":"final_answer","arguments":{"answer":"failure"}}\n'
+                    "</｜｜DSML｜｜ calls>"
+                ),
+                "tool_calls": [],
+                "reasoning_content": "续跑思考",
+            })
+
+    fault = FaultSpec.model_validate({
+        "injection_point": "observation",
+        "fault_type": "error_response",
+        "surface_as": "not_applicable",
+        "params": {"message": "actual corrupted observation"},
+    })
+    provider = DsmlTextProvider()
+    host = SmolagentsHost()
+    with pytest.raises(ReplayError, match="原生 tool_calls"):
+        host.run_counterfactual(
+            SCRIPT, fault=fault, sandbox=tmp_path, model_provider=provider
+        )
+
+    # 原始错误发生在第二轮；不得再进入第三轮后才报“观察缺少工具调用 ID”。
+    assert len(provider.messages) == 2
+    outputs = [event for event in host.last_events if event["kind"] == "model_output"]
+    assert [event["m3_phase"] for event in outputs] == ["prefix", "continuation"]
+    assert outputs[-1]["continuation_protocol_error"] == (
+        "native_final_answer_tool_call_required"
+    )
+    assert (tmp_path / "output" / "hello.txt").is_file()
+    assert len([event for event in host.last_events if event["kind"] == "injection"]) == 1

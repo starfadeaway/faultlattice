@@ -266,6 +266,26 @@ class StructuredLiveModel(Model):
                 "M3 续跑请求只提供 final_answer，模型仍返回额外业务工具调用；"
                 "已在执行前阻断，不重试、不创建探针或额外副作用"
             )
+        if phase == "continuation":
+            calls = response.tool_calls
+            valid_shape = (
+                len(calls) == 1
+                and calls[0].name == "final_answer"
+                and set(calls[0].args) == {"answer"}
+                and isinstance(calls[0].args["answer"], str)
+            )
+            if not valid_shape:
+                # 必须在 smolagents 解析普通文本或 DSML 前拒绝；否则下一轮记忆
+                # 会含无工具调用 ID 的伪观察，真正的协议错误就被二次异常掩盖。
+                output_event["continuation_protocol_error"] = (
+                    "native_final_answer_tool_call_required"
+                )
+                self._events.append(output_event)
+                raise ReplayError(
+                    "M3 续跑必须通过原生 tool_calls 且只能调用一次 final_answer，"
+                    "参数仅含字符串 answer；普通文本、Action、DSML 或 XML 模拟调用均不合格。"
+                    "本次不重试、不补造工具调用、不进入额外模型轮次"
+                )
         self._events.append(output_event)
         calls = [
             ChatMessageToolCall(
@@ -608,7 +628,10 @@ class SmolagentsHost:
                 target,
                 "【smolagents 第二轮终答协议】\n"
                 "续跑请求只提供 final_answer；必须且只能调用一次 final_answer，"
-                "answer 是完整最终回答；不得以普通文本结束，不得同时调用其它工具。",
+                "answer 是完整最终回答；不得以普通文本结束，不得同时调用其它工具。\n"
+                "final_answer 必须位于响应的原生 tool_calls 字段，参数只能包含字符串 answer。"
+                "禁止在 content 中用 Action:、DSML、XML 或其它文本模拟工具调用；"
+                "即使文本内含状态声明，也不能代替原生 final_answer 工具调用。",
                 state_claim_protocol=provider.state_claim_protocol,
             )
         try:
