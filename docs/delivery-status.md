@@ -85,6 +85,7 @@ uv run pytest tests/meta/test_public_samples.py -q
 - 可控 LangGraph 回归证明：续跑违规业务工具调用在执行前阻断后，`blocked_tool_calls`、工具边界、目标写入、故障注入、失败 `run_end` 和异常 `run_id` 均已落盘；探针文件不存在。该测试使用伪模型，不是新增真实模型实验。
 - 首轮易错点契约真实 M3 重跑仍是：18/18 完成并生成四件套，18 个模型层均为 `explicit_failure`，0 个 Harness 错误；18 个单次公开副本复算通过，3 份模型聚合报告为本地非公开审计产物。
 - 三个独立判断 Harness 失败已另建单次后续实验：DeepSeek / smolagents 与 MiniMax / LangGraph 错误观察坐标完成并复算，MiniMax / LangGraph 空返回仍删除目标末尾换行，在写入前严格拒绝。smolagents 现在对非原生 `final_answer` 立即记录明确协议错误，不进入异常记忆；适配器不自动补参或把 DSML 文本伪装成工具调用。详见 `reports/external/2026-11-29-harness-failure-followup.md`。
+- MiniMax 换行专项已执行 24 次首轮无工具诊断：简化文本现行提示 12/12 精确匹配，原空返回提示 4/4 删除末尾换行，原观察错误提示 3/4 精确匹配、1/4 写成字面 `\n`；新增字面量自校验提示 2/4 偏离，因此不合入。严格前缀拒绝与历史结论保持不变，详见 `reports/external/2026-11-29-minimax-newline-diagnostics.md`。
 - 最新完整测试：374 passed（包含新增 2 个公开样例复算）。
 - Ruff：通过；Pyright：0 errors、0 warnings、0 informations。
 - 公开样例现有 76 个单次四件套和 4 个历史公开批次；独立判断试点新增 15 个完整运行，后续实验新增 2 个，未改写既有真实模型结果。公开行为回归门禁通过。

@@ -1,0 +1,828 @@
+{
+  "schema": "faultlattice.prefix-diagnostic-evidence-v1",
+  "source_commit": "7756e3582fc1605f432fde47bb4aea1af017e93d",
+  "model_id": "MiniMax-M3.1-Flash",
+  "sampling_params": {
+    "temperature": 0.0
+  },
+  "total_requests": 24,
+  "automatic_retry": false,
+  "automatic_model_switch": false,
+  "argument_autocorrection": false,
+  "tool_execution": false,
+  "fault_injection": false,
+  "canonical_run_artifacts": false,
+  "privacy": "仅公开目标与实际工具参数、分类和提示哈希；不含凭据、端点、请求头或思考字段。",
+  "stages": [
+    {
+      "stage_id": "prefix_matrix",
+      "design": "initial frozen exploratory matrix",
+      "model": {
+        "provider": "openai_compatible",
+        "model_id": "MiniMax-M3.1-Flash",
+        "sampling_params": {
+          "temperature": 0.0
+        },
+        "reasoning_mode": "default"
+      },
+      "tool_schema": {
+        "type": "function",
+        "function": {
+          "name": "write_file",
+          "description": "在实验沙箱内写入 UTF-8 文本文件。",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "相对于实验沙箱的文件路径"
+              },
+              "content": {
+                "type": "string",
+                "description": "要写入的完整文本"
+              }
+            },
+            "required": [
+              "path",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "protocol": {
+        "requests_per_condition": 4,
+        "total_requests": 16,
+        "order": [
+          "current_no_newline#1",
+          "current_trailing_newline#1",
+          "current_internal_and_trailing_newline#1",
+          "literal_self_check_trailing_newline#1",
+          "current_no_newline#2",
+          "current_trailing_newline#2",
+          "current_internal_and_trailing_newline#2",
+          "literal_self_check_trailing_newline#2",
+          "current_no_newline#3",
+          "current_trailing_newline#3",
+          "current_internal_and_trailing_newline#3",
+          "literal_self_check_trailing_newline#3",
+          "current_no_newline#4",
+          "current_trailing_newline#4",
+          "current_internal_and_trailing_newline#4",
+          "literal_self_check_trailing_newline#4"
+        ],
+        "automatic_retry": false,
+        "automatic_model_switch": false,
+        "argument_autocorrection": false,
+        "tool_execution": false,
+        "fault_injection": false,
+        "canonical_run_artifacts": false,
+        "purpose": "exploratory prefix-only compatibility diagnosis, not model ranking"
+      },
+      "conditions": {
+        "current_no_newline": {
+          "content": "hello minimax",
+          "prompt_sha256": "9c185c752fa0ea0d5995eb9e3114179240e10cc305acccee9a613988794d897a",
+          "purpose": "无末尾换行对照；区分一般参数错误与特定换行丢失。"
+        },
+        "current_trailing_newline": {
+          "content": "hello minimax\n",
+          "prompt_sha256": "74fb3f5885fd93c1a8daa35a8b0d86882951f73abc2d42fddda42d117452c274",
+          "purpose": "复现现行提示下末尾换行是否被删除。"
+        },
+        "current_internal_and_trailing_newline": {
+          "content": "hello minimax\nsecond line\n",
+          "prompt_sha256": "e954f6ef23d5eb28185643032d2b181cd01d2e70f2770694f0a745725287333c",
+          "purpose": "区分内部换行保留与末尾换行删除。"
+        },
+        "literal_self_check_trailing_newline": {
+          "content": "hello minimax\n",
+          "prompt_sha256": "b2c50db23efe09348953bd4fc946506c66da10eedd8739b16aaddabeb2e4706d",
+          "purpose": "探索显式 JSON 字面量和长度自校验是否减少末尾换行丢失。"
+        }
+      },
+      "aggregate_counts": {
+        "exact_match": 14,
+        "other_argument_mismatch": 2
+      },
+      "detailed_difference_counts": {
+        "exact_match": 14,
+        "extra_quotes_and_literal_backslash_n": 1,
+        "literal_backslash_n": 1
+      },
+      "requests": [
+        {
+          "coordinate": "current_no_newline#1",
+          "condition_id": "current_no_newline",
+          "repetition": 1,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "9c185c752fa0ea0d5995eb9e3114179240e10cc305acccee9a613988794d897a"
+        },
+        {
+          "coordinate": "current_trailing_newline#1",
+          "condition_id": "current_trailing_newline",
+          "repetition": 1,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "74fb3f5885fd93c1a8daa35a8b0d86882951f73abc2d42fddda42d117452c274"
+        },
+        {
+          "coordinate": "current_internal_and_trailing_newline#1",
+          "condition_id": "current_internal_and_trailing_newline",
+          "repetition": 1,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\nsecond line\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\nsecond line\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "e954f6ef23d5eb28185643032d2b181cd01d2e70f2770694f0a745725287333c"
+        },
+        {
+          "coordinate": "literal_self_check_trailing_newline#1",
+          "condition_id": "literal_self_check_trailing_newline",
+          "repetition": 1,
+          "request_status": "completed",
+          "classification": "other_argument_mismatch",
+          "difference_type": "literal_backslash_n",
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "b2c50db23efe09348953bd4fc946506c66da10eedd8739b16aaddabeb2e4706d"
+        },
+        {
+          "coordinate": "current_no_newline#2",
+          "condition_id": "current_no_newline",
+          "repetition": 2,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "9c185c752fa0ea0d5995eb9e3114179240e10cc305acccee9a613988794d897a"
+        },
+        {
+          "coordinate": "current_trailing_newline#2",
+          "condition_id": "current_trailing_newline",
+          "repetition": 2,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "74fb3f5885fd93c1a8daa35a8b0d86882951f73abc2d42fddda42d117452c274"
+        },
+        {
+          "coordinate": "current_internal_and_trailing_newline#2",
+          "condition_id": "current_internal_and_trailing_newline",
+          "repetition": 2,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\nsecond line\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\nsecond line\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "e954f6ef23d5eb28185643032d2b181cd01d2e70f2770694f0a745725287333c"
+        },
+        {
+          "coordinate": "literal_self_check_trailing_newline#2",
+          "condition_id": "literal_self_check_trailing_newline",
+          "repetition": 2,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "b2c50db23efe09348953bd4fc946506c66da10eedd8739b16aaddabeb2e4706d"
+        },
+        {
+          "coordinate": "current_no_newline#3",
+          "condition_id": "current_no_newline",
+          "repetition": 3,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "9c185c752fa0ea0d5995eb9e3114179240e10cc305acccee9a613988794d897a"
+        },
+        {
+          "coordinate": "current_trailing_newline#3",
+          "condition_id": "current_trailing_newline",
+          "repetition": 3,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "74fb3f5885fd93c1a8daa35a8b0d86882951f73abc2d42fddda42d117452c274"
+        },
+        {
+          "coordinate": "current_internal_and_trailing_newline#3",
+          "condition_id": "current_internal_and_trailing_newline",
+          "repetition": 3,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\nsecond line\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\nsecond line\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "e954f6ef23d5eb28185643032d2b181cd01d2e70f2770694f0a745725287333c"
+        },
+        {
+          "coordinate": "literal_self_check_trailing_newline#3",
+          "condition_id": "literal_self_check_trailing_newline",
+          "repetition": 3,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "content": "hello minimax\n",
+                "path": "output/hello.txt"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "b2c50db23efe09348953bd4fc946506c66da10eedd8739b16aaddabeb2e4706d"
+        },
+        {
+          "coordinate": "current_no_newline#4",
+          "condition_id": "current_no_newline",
+          "repetition": 4,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "9c185c752fa0ea0d5995eb9e3114179240e10cc305acccee9a613988794d897a"
+        },
+        {
+          "coordinate": "current_trailing_newline#4",
+          "condition_id": "current_trailing_newline",
+          "repetition": 4,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "74fb3f5885fd93c1a8daa35a8b0d86882951f73abc2d42fddda42d117452c274"
+        },
+        {
+          "coordinate": "current_internal_and_trailing_newline#4",
+          "condition_id": "current_internal_and_trailing_newline",
+          "repetition": 4,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\nsecond line\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello minimax\nsecond line\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "e954f6ef23d5eb28185643032d2b181cd01d2e70f2770694f0a745725287333c"
+        },
+        {
+          "coordinate": "literal_self_check_trailing_newline#4",
+          "condition_id": "literal_self_check_trailing_newline",
+          "repetition": 4,
+          "request_status": "completed",
+          "classification": "other_argument_mismatch",
+          "difference_type": "extra_quotes_and_literal_backslash_n",
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello minimax\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "\"output/hello.txt\"",
+                "content": "\"hello minimax\\n\""
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "b2c50db23efe09348953bd4fc946506c66da10eedd8739b16aaddabeb2e4706d"
+        }
+      ]
+    },
+    {
+      "stage_id": "historical_prompts",
+      "design": "sequential exploratory follow-up after inspecting the first 16 requests",
+      "model": {
+        "provider": "openai_compatible",
+        "model_id": "MiniMax-M3.1-Flash",
+        "sampling_params": {
+          "temperature": 0.0
+        },
+        "reasoning_mode": "default"
+      },
+      "tool_schema": {
+        "type": "function",
+        "function": {
+          "name": "write_file",
+          "description": "在实验沙箱内写入 UTF-8 文本文件。",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "相对于实验沙箱的文件路径"
+              },
+              "content": {
+                "type": "string",
+                "description": "要写入的完整文本"
+              }
+            },
+            "required": [
+              "path",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "protocol": {
+        "requests_per_condition": 4,
+        "total_requests": 8,
+        "order": [
+          "historical_empty_exact_prompt#1",
+          "historical_observation_exact_prompt#1",
+          "historical_empty_exact_prompt#2",
+          "historical_observation_exact_prompt#2",
+          "historical_empty_exact_prompt#3",
+          "historical_observation_exact_prompt#3",
+          "historical_empty_exact_prompt#4",
+          "historical_observation_exact_prompt#4"
+        ],
+        "automatic_retry": false,
+        "automatic_model_switch": false,
+        "argument_autocorrection": false,
+        "tool_execution": false,
+        "fault_injection": false,
+        "canonical_run_artifacts": false,
+        "purpose": "exact historical prompt/content prefix-only diagnosis"
+      },
+      "conditions": {
+        "historical_empty_exact_prompt": {
+          "content": "hello langgraph empty\n",
+          "prompt_sha256": "26c2ec5d21d479ca8a1359bc805b5ab8ad46149ce42c4c63a06c0de513022e16",
+          "purpose": "逐字复用此前删除末尾换行的空返回坐标提示词。"
+        },
+        "historical_observation_exact_prompt": {
+          "content": "hello langgraph observation\n",
+          "prompt_sha256": "bc6fd7954d55dae122769b8c5372ed0252d19a170e1df5b3691a69490927c815",
+          "purpose": "逐字复用此前成功保留末尾换行的观察错误坐标提示词。"
+        }
+      },
+      "aggregate_counts": {
+        "exact_match": 3,
+        "missing_trailing_newline": 4,
+        "other_argument_mismatch": 1
+      },
+      "detailed_difference_counts": {
+        "exact_match": 3,
+        "literal_backslash_n": 1,
+        "missing_trailing_newline": 4
+      },
+      "requests": [
+        {
+          "coordinate": "historical_empty_exact_prompt#1",
+          "condition_id": "historical_empty_exact_prompt",
+          "repetition": 1,
+          "request_status": "completed",
+          "classification": "missing_trailing_newline",
+          "difference_type": "missing_trailing_newline",
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello langgraph empty\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello langgraph empty"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "26c2ec5d21d479ca8a1359bc805b5ab8ad46149ce42c4c63a06c0de513022e16"
+        },
+        {
+          "coordinate": "historical_observation_exact_prompt#1",
+          "condition_id": "historical_observation_exact_prompt",
+          "repetition": 1,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello langgraph observation\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello langgraph observation\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "bc6fd7954d55dae122769b8c5372ed0252d19a170e1df5b3691a69490927c815"
+        },
+        {
+          "coordinate": "historical_empty_exact_prompt#2",
+          "condition_id": "historical_empty_exact_prompt",
+          "repetition": 2,
+          "request_status": "completed",
+          "classification": "missing_trailing_newline",
+          "difference_type": "missing_trailing_newline",
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello langgraph empty\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello langgraph empty"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "26c2ec5d21d479ca8a1359bc805b5ab8ad46149ce42c4c63a06c0de513022e16"
+        },
+        {
+          "coordinate": "historical_observation_exact_prompt#2",
+          "condition_id": "historical_observation_exact_prompt",
+          "repetition": 2,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello langgraph observation\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello langgraph observation\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "bc6fd7954d55dae122769b8c5372ed0252d19a170e1df5b3691a69490927c815"
+        },
+        {
+          "coordinate": "historical_empty_exact_prompt#3",
+          "condition_id": "historical_empty_exact_prompt",
+          "repetition": 3,
+          "request_status": "completed",
+          "classification": "missing_trailing_newline",
+          "difference_type": "missing_trailing_newline",
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello langgraph empty\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello langgraph empty"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "26c2ec5d21d479ca8a1359bc805b5ab8ad46149ce42c4c63a06c0de513022e16"
+        },
+        {
+          "coordinate": "historical_observation_exact_prompt#3",
+          "condition_id": "historical_observation_exact_prompt",
+          "repetition": 3,
+          "request_status": "completed",
+          "classification": "other_argument_mismatch",
+          "difference_type": "literal_backslash_n",
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello langgraph observation\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello langgraph observation\\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "bc6fd7954d55dae122769b8c5372ed0252d19a170e1df5b3691a69490927c815"
+        },
+        {
+          "coordinate": "historical_empty_exact_prompt#4",
+          "condition_id": "historical_empty_exact_prompt",
+          "repetition": 4,
+          "request_status": "completed",
+          "classification": "missing_trailing_newline",
+          "difference_type": "missing_trailing_newline",
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello langgraph empty\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello langgraph empty"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "26c2ec5d21d479ca8a1359bc805b5ab8ad46149ce42c4c63a06c0de513022e16"
+        },
+        {
+          "coordinate": "historical_observation_exact_prompt#4",
+          "condition_id": "historical_observation_exact_prompt",
+          "repetition": 4,
+          "request_status": "completed",
+          "classification": "exact_match",
+          "difference_type": null,
+          "expected_tool_call": {
+            "name": "write_file",
+            "args": {
+              "content": "hello langgraph observation\n",
+              "path": "output/hello.txt"
+            }
+          },
+          "actual_tool_calls": [
+            {
+              "name": "write_file",
+              "args": {
+                "path": "output/hello.txt",
+                "content": "hello langgraph observation\n"
+              }
+            }
+          ],
+          "finish_reason": "tool_calls",
+          "prompt_sha256": "bc6fd7954d55dae122769b8c5372ed0252d19a170e1df5b3691a69490927c815"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "探索性小样本，不用于稳定成功率、模型排名或因果归因。",
+    "第一阶段与第二阶段顺序设计分开报告，不能合并成同一预注册批次。",
+    "仅诊断首轮参数，不证明完整 M3 故障观察与终答能力。"
+  ]
+}

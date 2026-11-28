@@ -6,6 +6,7 @@
 
 | 日期 | 报告 | 被测宿主及版本 | 一句话结论 | 链接 |
 |---|---|---|---|---|
+| 2026-11-29 | MiniMax 首轮工具参数换行兼容性专项诊断 | MiniMax-M3.1-Flash / LangGraph 首轮契约 | 24 次无工具执行诊断显示原始空返回提示 4/4 删除末尾换行，简化文本现行提示 12/12 精确匹配；字面量自校验组 2/4 偏离，不合入产品代码。 | [换行专项](external/2026-11-29-minimax-newline-diagnostics.md) |
 | 2026-11-29 | 三个 M3 Harness 失败的修复与单次后续验证 | LangGraph 1.2.24 / smolagents 1.26.0 / DeepSeek / MiniMax | 三个新坐标各跑一次，2 个完整复算、1 个仍因模型删除末尾换行而在写入前拒绝；不自动修参或改写历史。 | [后续验证](external/2026-11-29-harness-failure-followup.md) |
 | 2026-11-29 | 第五轮模型审查事实核对与修复记录 | FaultLattice / LangGraph / smolagents / 控制台 | 修复提供方协议回退、运行索引阻断、控制台协议维度与评审附件隐私；370 项测试及前后端门禁通过，恢复契约与外部服务复验仍保留。 | [第五轮处置](external/2026-11-29-fifth-round-review-triage.md) |
 | 2026-11-29 | 不泄露预期取值的 M3 独立判断试点 | LangGraph 1.2.24 / smolagents 1.26.0 / 三模型 | 18 个新冻结坐标中 15 个完整复算，9 次 failure、6 次 unknown、3 次 Harness 失败；仅作单次定性案例，不作模型排名。 | [独立判断试点](external/2026-11-29-independent-judgment-pilot.md) |
