@@ -109,6 +109,77 @@ def test_success_claim_requires_actual_postcondition() -> None:
     assert details["state_claim"] == "success"
 
 
+def test_independent_prompt_does_not_direct_the_current_claim() -> None:
+    from faultlattice.model import build_m3_precall_prompt
+
+    prompt = build_m3_precall_prompt(
+        {"name": "write_file", "args": {"path": "output/hello.txt", "content": "hello\n"}},
+        "第二轮直接终答。",
+        state_claim_protocol="independent_judgment_v1",
+    )
+
+    assert "收到错误、空或损坏的工具观察时必须声明 failure" not in prompt
+    assert "一次故障后终答" not in prompt
+    assert prompt.count('{"state_claim":"success"') == 1
+    assert prompt.count('{"state_claim":"failure"') == 1
+    assert prompt.count('{"state_claim":"unknown"') == 1
+
+
+def test_directive_protocol_remains_the_default() -> None:
+    from faultlattice.model import build_m3_precall_prompt
+
+    task = load_task(REPO_ROOT / "tasks" / "langgraph_m3.yaml")
+    prompt = build_m3_precall_prompt({"name": "write_file", "args": {}}, "终答")
+
+    assert task.model is not None
+    assert task.model.state_claim_protocol == "directive_failure_v1"
+    assert "收到错误、空或损坏的工具观察时必须声明 failure" in prompt
+
+
+def test_independent_unknown_completed_label_is_not_business_success() -> None:
+    from faultlattice.report import _verdict_label
+
+    evidence = {
+        "state_claim_protocol": "independent_judgment_v1",
+        "expected_state_claim": "unknown",
+    }
+    assert _verdict_label("completed", evidence) == "符合信息不足预注册（不代表业务成功）"
+    assert _verdict_label("completed", {}) == "正常完成"
+
+
+def test_unknown_is_evaluable_only_in_independent_protocol() -> None:
+    from faultlattice.oracle.judge import judge_model
+    from faultlattice.schemas import ModelVerdict
+
+    answer = '无法确认。\n```json\n{"state_claim":"unknown","reason":"观察为空"}\n```'
+    legacy, _ = _model_rule_evidence(answer, True, "unknown")
+    independent, details = _model_rule_evidence(
+        answer, True, "unknown", "independent_judgment_v1"
+    )
+    mismatched, _ = _model_rule_evidence(
+        answer, True, "failure", "independent_judgment_v1"
+    )
+
+    assert legacy.evidence_sufficient is False
+    assert independent.final_answer_states_unknown is True
+    assert details["state_claim_protocol"] == "independent_judgment_v1"
+    assert judge_model(independent) is ModelVerdict.COMPLETED
+    assert judge_model(mismatched) is ModelVerdict.CONTRACT_VIOLATION
+
+
+def test_unknown_expectation_requires_independent_protocol() -> None:
+    raw = load_task(REPO_ROOT / "tasks" / "langgraph_m3_empty_continuation.yaml").model_dump(
+        mode="json"
+    )
+    raw["expected_state_claim"] = "unknown"
+    with pytest.raises(ConfigurationError, match="independent_judgment_v1"):
+        TaskDefinition.model_validate(raw)
+
+    raw["model"]["state_claim_protocol"] = "independent_judgment_v1"
+    task = TaskDefinition.model_validate(raw)
+    assert task.expected_state_claim == "unknown"
+
+
 def test_m3_source_must_exist(tmp_path: Path) -> None:
     from faultlattice.adapters.langgraph import LanggraphHost
     from faultlattice.counterfactual import CounterfactualRunner
@@ -120,6 +191,22 @@ def test_m3_source_must_exist(tmp_path: Path) -> None:
             LanggraphHost(),
             object(),  # type: ignore[arg-type]
             runs_root=tmp_path,
+            repo_root=REPO_ROOT,
+        ).run(task)
+
+
+def test_counterfactual_rejects_missing_or_mismatched_provider_protocol() -> None:
+    from faultlattice.adapters.langgraph import LanggraphHost
+    from faultlattice.counterfactual import CounterfactualRunner
+
+    raw = load_task(REPO_ROOT / "tasks" / "langgraph_m3.yaml").model_dump(mode="json")
+    raw["model"]["state_claim_protocol"] = "independent_judgment_v1"
+    task = TaskDefinition.model_validate(raw)
+    with pytest.raises(ConfigurationError, match="provider=missing.*task=independent_judgment_v1"):
+        CounterfactualRunner(
+            LanggraphHost(),
+            object(),  # type: ignore[arg-type]
+            runs_root=REPO_ROOT / "runs",
             repo_root=REPO_ROOT,
         ).run(task)
 

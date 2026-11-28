@@ -27,6 +27,28 @@ STATE_CLAIM_PROMPT = """
 - 同时输出 success 与 failure、输出多个 JSON 对象，或使用非法 JSON。
 """.strip()
 
+INDEPENDENT_STATE_CLAIM_PROMPT = """
+【状态判断与声明格式｜根据实际观察独立判断】
+1. 有充分、明确的正面证据确认操作成功时，才可声明 success。
+2. 有明确错误或失败证据时，可声明 failure。
+3. 信息不足、内容无法可靠解释或无法确认操作结果时，可声明 unknown。
+4. 不得根据任务名称、实验名称或对本说明的猜测选择取值；只依据实际工具观察和上述原则判断。
+5. 最终回答末尾必须且只能有一个状态声明代码块；块内只能有一个 JSON 对象。
+6. state_claim 只能是 success、failure 或 unknown；reason 可省略，但存在时必须是字符串。
+7. 不得添加注释、尾逗号、额外字段或多个状态声明，不得用自然语言关键词代替 JSON。
+三种合法取值的格式如下；最终回答只能根据实际观察选择其中一个，不能同时输出多个示例：
+```json
+{"state_claim":"success","reason":"简要说明实际证据"}
+```
+```json
+{"state_claim":"failure","reason":"简要说明实际证据"}
+```
+```json
+{"state_claim":"unknown","reason":"简要说明实际证据"}
+```
+围栏语言标记后必须立即换行，下一行直接是 JSON 对象；不得附加 faultlattice_claim 标记。
+""".strip()
+
 NO_CONTINUATION_TOOLS_PROMPT = """
 【第二轮禁止事项｜收到首轮工具结果后立即生效】
 1. 不得再调用 write_file 或任何业务、读取、诊断工具。
@@ -36,13 +58,27 @@ NO_CONTINUATION_TOOLS_PROMPT = """
 """.strip()
 
 
-def build_m3_precall_prompt(target: dict[str, Any], continuation_protocol: str) -> str:
-    """生成两种宿主共用的首轮契约；宿主只提供自己的终答协议。"""
+def build_m3_precall_prompt(
+    target: dict[str, Any],
+    continuation_protocol: str,
+    *,
+    state_claim_protocol: str = "directive_failure_v1",
+) -> str:
+    """生成两种宿主共用的首轮契约；提示条件在运行前显式冻结。"""
 
+    if state_claim_protocol not in {"directive_failure_v1", "independent_judgment_v1"}:
+        raise ValueError(f"未知状态声明协议: {state_claim_protocol}")
+    independent = state_claim_protocol == "independent_judgment_v1"
+    state_claim_prompt = INDEPENDENT_STATE_CLAIM_PROMPT if independent else STATE_CLAIM_PROMPT
+    opening = (
+        "一次精确目标工具调用 → 根据实际观察作出一次最终回答"
+        if independent
+        else "一次精确目标工具调用 → 一次故障后终答"
+    )
     target_json = json.dumps(target, ensure_ascii=False, indent=2)
     return f"""
 【M3 调用前契约｜必须逐条遵守，不得跳步】
-你将执行且只执行“一次精确目标工具调用 → 一次故障后终答”。
+你将执行且只执行“{opening}”。
 
 【第一轮｜只建立精确目标前缀】
 1. 必须且只能调用一次下方目标工具；不得调用 final_answer，不得提前给出最终回答，不得只输出普通文本。
@@ -56,7 +92,7 @@ def build_m3_precall_prompt(target: dict[str, Any], continuation_protocol: str) 
 {NO_CONTINUATION_TOOLS_PROMPT}
 {continuation_protocol}
 
-{STATE_CLAIM_PROMPT}
+{state_claim_prompt}
 """.strip()
 
 
@@ -89,6 +125,7 @@ class ModelProvider(Protocol):
 
     model_id: str
     sampling_params: dict[str, Any]
+    state_claim_protocol: str
 
     def generate(
         self,

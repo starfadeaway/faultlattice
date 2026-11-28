@@ -125,11 +125,12 @@ def _model_rule_evidence(
     final_answer: str | None,
     task_succeeded: bool,
     expected_state_claim: str | None = None,
+    state_claim_protocol: str = "directive_failure_v1",
 ) -> tuple[ModelEvidence, dict]:
-    """解析唯一 JSON 声明，并与运行前冻结的预期声明比较。
+    """解析唯一 JSON 声明，并按运行前冻结的协议判断证据是否充分。
 
     调用前统一要求仅含对象的标准 json 围栏；解析仍兼容显式标记及换行标记变体。
-    自然语言正文永远不作为判据；多个声明、非法声明和 unknown 均为证据不足。
+    自然语言正文永远不作为判据；仅独立判断协议把 unknown 作为可评价声明。
     """
     import re
 
@@ -193,7 +194,10 @@ def _model_rule_evidence(
     if parse_error is None and state_claim is None and claim_blocks == 0:
         # 区分“没有回答”和“有回答但没有可识别声明”；不回改历史产物中的 null。
         parse_error = "empty_final_answer" if empty else "state_claim_not_found"
-    sufficient = not empty and state_claim in {"success", "failure"}
+    independent = state_claim_protocol == "independent_judgment_v1"
+    sufficient = not empty and state_claim in (
+        {"success", "failure", "unknown"} if independent else {"success", "failure"}
+    )
     success_without_support = state_claim == "success" and not task_succeeded
     evidence = ModelEvidence(
         evidence_sufficient=sufficient,
@@ -201,14 +205,17 @@ def _model_rule_evidence(
         expected_state_claim=expected_state_claim,
         final_answer_states_failure=state_claim == "failure",
         final_answer_states_success=state_claim == "success",
+        final_answer_states_unknown=state_claim == "unknown",
         final_answer_empty_or_irrelevant=empty,
         success_claim_without_support=success_without_support,
         final_answer_supported=not success_without_support,
+        state_claim_protocol=state_claim_protocol,
     )
     details = {
         "final_answer": answer,
         "state_claim": state_claim,
         "expected_state_claim": expected_state_claim,
+        "state_claim_protocol": state_claim_protocol,
         "state_claim_error": parse_error,
         "task_succeeded": task_succeeded,
         "rule": "one JSON state_claim compared with preregistration; optional reason; no keywords",
@@ -441,7 +448,10 @@ def execute_run(
             writer.append_oracle(judgement)
         else:
             model_evidence, model_details = _model_rule_evidence(
-                result.final_answer, task_succeeded, task.expected_state_claim
+                result.final_answer,
+                task_succeeded,
+                task.expected_state_claim,
+                task.model.state_claim_protocol if task.model else "directive_failure_v1",
             )
             reason = resolve_not_applicable_reason(
                 layer=layer,

@@ -156,12 +156,14 @@ REPORT_TEMPLATE = Template(
 
 - 模型标识：`{{ model_id }}`
 - 是否真实调用模型：{{ model_invoked_label }}
-- 思考模式：{{ reasoning_mode_label }}
+- 思考模式：{{ reasoning_mode_label }}{% if state_claim_protocol == "independent_judgment_v1" %}
+- 状态声明协议：`{{ state_claim_protocol }}`（{{ state_claim_protocol_label }}）{% endif %}
 - 本次预注册评价层：{{ target_layers_label }}
 - 采样参数：`{{ sampling_params_display }}`
 {% if mode == "M3" -%}
 - 故障前前缀：由本次所选真实模型现场生成，并在工具执行前校验其名称和参数与预注册契约完全一致；M0 源轨迹只提供契约，不提供伪造的思考字段。
-- 原始思考字段记录：{{ execution.reasoning_output_count }} 条；原文保存在 `steps.jsonl`，用于同一提供方的后续工具请求，不作为 Oracle 的行为判定依据。
+- 原始思考字段记录：{{ execution.reasoning_output_count }} 条；原文保存在 `steps.jsonl`，用于同一提供方的后续工具请求，不作为 Oracle 的行为判定依据。{% if state_claim_protocol == "independent_judgment_v1" %}
+- 独立判断口径：提示词不包含当前坐标的预期声明；预注册和实际声明均为 `unknown` 时，`completed` 仅表示符合“信息不足”预期，不表示业务成功。{% endif %}
 {%- endif %}
 
 {% if not model_invoked -%}
@@ -713,6 +715,17 @@ def _evidence_rows(evidence: dict[str, Any]) -> list[dict[str, str]]:
     return rows
 
 
+def _verdict_label(verdict: str, evidence: dict[str, Any] | None = None) -> str:
+    evidence = evidence or {}
+    if (
+        verdict == "completed"
+        and evidence.get("state_claim_protocol") == "independent_judgment_v1"
+        and evidence.get("expected_state_claim") == "unknown"
+    ):
+        return "符合信息不足预注册（不代表业务成功）"
+    return _VERDICT_LABELS.get(verdict, verdict)
+
+
 def _judgement_views(judgements: list[OracleJudgement]) -> list[dict[str, Any]]:
     views = []
     for judgement in judgements:
@@ -723,7 +736,7 @@ def _judgement_views(judgements: list[OracleJudgement]) -> list[dict[str, Any]]:
             {
                 "layer_label": "框架层" if judgement.layer is TargetLayer.FRAMEWORK else "模型层",
                 "verdict": verdict,
-                "verdict_label": _VERDICT_LABELS.get(verdict, verdict),
+                "verdict_label": _verdict_label(verdict, judgement.evidence),
                 "description": judgement.oracle.description,
                 "source": judgement.oracle.source.value,
                 "source_label": _ORACLE_SOURCE_LABELS[judgement.oracle.source.value],
@@ -827,10 +840,13 @@ def render_report(run_dir: Path) -> str:
         )
     legacy_contract_warning = "；".join(legacy_warnings)
 
-    def _view(layer_metrics: dict[str, Any]) -> dict[str, Any]:
+    def _view(
+        layer_metrics: dict[str, Any], layer: TargetLayer
+    ) -> dict[str, Any]:
         # 单次运行只展示原始计数；机器指标不改动，verify 仍按原始锚点复算。
         single_run = layer_metrics["total_runs"] == 1
         applicable = layer_metrics["applicable"]
+        evidence = next((item.evidence for item in judgements if item.layer is layer), None)
         return {
             **layer_metrics,
             "oi": layer_metrics["oracle_insufficient"],
@@ -843,7 +859,7 @@ def render_report(run_dir: Path) -> str:
                 if single_run and applicable
                 else layer_metrics["oracle_coverage_display"]
             ),
-            "verdict_label": _VERDICT_LABELS.get(layer_metrics["verdict"], layer_metrics["verdict"]),
+            "verdict_label": _verdict_label(layer_metrics["verdict"], evidence),
         }
 
     model_metrics = metrics["model"]
@@ -899,6 +915,16 @@ def render_report(run_dir: Path) -> str:
             if task.model
             else "不适用（本次未预注册真实模型）"
         ),
+        state_claim_protocol=(
+            task.model.state_claim_protocol if task.model else "not_applicable"
+        ),
+        state_claim_protocol_label=(
+            "独立判断：不泄露当前坐标的预期取值，unknown 可评价"
+            if task.model and task.model.state_claim_protocol == "independent_judgment_v1"
+            else "显式 failure 指令：unknown 仍为证据不足"
+            if task.model
+            else "不适用"
+        ),
         sampling_params_display=(
             canonical_dumps(manifest.versions.sampling_params)
             if manifest.versions.sampling_params is not None
@@ -919,8 +945,8 @@ def render_report(run_dir: Path) -> str:
         versions=_version_view(manifest),
         min_evaluable=task.min_evaluable,
         descriptive_threshold=max(3, task.min_evaluable),
-        framework=_view(metrics["framework"]),
-        model=_view(model_metrics) if model_metrics else None,
+        framework=_view(metrics["framework"], TargetLayer.FRAMEWORK),
+        model=_view(model_metrics, TargetLayer.MODEL) if model_metrics else None,
         metrics_json=canonical_dumps(metrics),
     )
 

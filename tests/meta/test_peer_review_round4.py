@@ -28,6 +28,7 @@ PREFIX = [
 class BlockedToolProvider:
     model_id = "fake-blocked-tool-model"
     sampling_params = {"temperature": 0.0}
+    state_claim_protocol = "directive_failure_v1"
 
     def __init__(self) -> None:
         self.calls = 0

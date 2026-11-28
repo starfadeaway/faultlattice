@@ -22,6 +22,7 @@ REQUIRED_GITIGNORE_RULES = [
     "!runs/_sample/**",
     ".env",
     ".verify/",
+    "reviews/",
     "external_projects/",
     "external_agents/uploads/",
     "external_agents/drafts/",
@@ -37,7 +38,7 @@ def check_gitignore() -> list[str]:
 def check_env_not_tracked() -> list[str]:
     try:
         result = subprocess.run(
-            ["git", "ls-files", "--", ".env"],
+            ["git", "ls-files", "--", ".env", "reviews"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -47,9 +48,13 @@ def check_env_not_tracked() -> list[str]:
         return []  # git 不可用时跳过（本地首次初始化前）
     if result.returncode != 0:
         return []
-    if result.stdout.strip():
-        return [".env 被 git 跟踪，必须移除并轮换其中凭据"]
-    return []
+    tracked = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    problems = []
+    if ".env" in tracked:
+        problems.append(".env 被 git 跟踪，必须移除并轮换其中凭据")
+    if any(path == "reviews" or path.startswith("reviews/") for path in tracked):
+        problems.append("reviews/ 被 git 跟踪，必须移除；本地评审附件不得公开")
+    return problems
 
 
 def check_runs_dir() -> list[str]:

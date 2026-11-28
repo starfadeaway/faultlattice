@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from faultlattice.errors import ReplayError
+from faultlattice.errors import ConfigurationError, ReplayError
 from faultlattice.host import CounterfactualHost, HostAdapter
 from faultlattice.model import ModelProvider
 from faultlattice.runner import execute_run, load_manifest
@@ -73,6 +73,13 @@ class CounterfactualRunner:
             raise ReplayError("M3 任务与源 run 的故障声明不一致")
         if not source.injection_applied:
             raise ReplayError("源 run 的故障未实际生效，不能作为 M3 起点")
+        task_protocol = task.model.state_claim_protocol if task.model is not None else None
+        provider_protocol = getattr(self.model, "state_claim_protocol", None)
+        if provider_protocol != task_protocol:
+            raise ConfigurationError(
+                "模型提供方状态声明协议与任务冻结值不一致: "
+                f"provider={provider_protocol or 'missing'}, task={task_protocol or 'missing'}"
+            )
         prefix = self._prefix_before_first_injection(source_dir)
         return execute_run(
             task,

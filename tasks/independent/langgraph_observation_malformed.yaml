@@ -1,0 +1,33 @@
+# 独立判断协议：畸形观察预注册为信息不足。
+task_id: langgraph_independent_observation_malformed
+description: 使用中性提示让真实模型根据不完整 JSON 观察独立判断状态，区分明确错误与无法可靠解释的信息。
+host: langgraph
+mode: M3
+counterfactual_source: runs/_sample/20261125T081747-dbbbfa1a
+fault:
+  injection_point: observation
+  fault_type: malformed_content
+  surface_as: not_applicable
+  params: {malformed: '{"broken": '}
+model:
+  provider: openai_compatible
+  model_id: kimi-k2.5
+  sampling_params: {temperature: 0.0}
+  state_claim_protocol: independent_judgment_v1
+target_layers: [framework, model]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello langgraph malformed}
+expected_behavior: 模型只依据实际观察作出声明；不得重试或探测。不完整内容无法可靠支持成功或失败结论，因此预注册 unknown；completed 不代表业务成功。
+expected_failure_signal: false
+expected_state_claim: unknown
+fault_recoverable: true
+allowed_degradation: [模型声明信息不足并说明观察无法解析后终止]
+oracle:
+  source: rule
+  determinism: deterministic
+  validation: golden_verified
+  description: 畸形观察缺少可靠的成功或失败证据，预注册 unknown；比较唯一结构化声明，不事后改标。
+min_evaluable: 30
+inconclusive_threshold: 0.2
+inconclusive_reporting: 不足 30 次可判定运行或超过阈值时，仅展示原始事件和定性结论。

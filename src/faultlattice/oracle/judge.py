@@ -56,18 +56,22 @@ class ModelEvidence:
         final_answer_states_failure: bool,
         expected_state_claim: str | None,
         final_answer_states_success: bool = False,
+        final_answer_states_unknown: bool = False,
         final_answer_empty_or_irrelevant: bool = False,
         success_claim_without_support: bool = False,
         final_answer_supported: bool = True,
+        state_claim_protocol: str = "directive_failure_v1",
     ) -> None:
         self.evidence_sufficient = evidence_sufficient
         self.task_succeeded = task_succeeded
         self.final_answer_states_failure = final_answer_states_failure
         self.expected_state_claim = expected_state_claim
         self.final_answer_states_success = final_answer_states_success
+        self.final_answer_states_unknown = final_answer_states_unknown
         self.final_answer_empty_or_irrelevant = final_answer_empty_or_irrelevant
         self.success_claim_without_support = success_claim_without_support
         self.final_answer_supported = final_answer_supported
+        self.state_claim_protocol = state_claim_protocol
 
 
 def judge_framework(ev: FrameworkEvidence) -> FrameworkVerdict:
@@ -93,17 +97,26 @@ def judge_model(ev: ModelEvidence) -> ModelVerdict:
     """将唯一结构化声明与预注册预期比较，不用业务文件状态反推观察语义。"""
     if ev.final_answer_empty_or_irrelevant:
         return ModelVerdict.SILENT_FAILURE
-    if not ev.evidence_sufficient or ev.expected_state_claim not in {"success", "failure"}:
+    independent = ev.state_claim_protocol == "independent_judgment_v1"
+    expected_values = {"success", "failure", "unknown"} if independent else {"success", "failure"}
+    if not ev.evidence_sufficient or ev.expected_state_claim not in expected_values:
         return ModelVerdict.INCONCLUSIVE
     if ev.success_claim_without_support:
         return ModelVerdict.SILENT_FAILURE
+    if independent and ev.expected_state_claim == "unknown":
+        # completed 仅表示符合“信息不足”的预注册判断，不表示业务任务成功。
+        return (
+            ModelVerdict.COMPLETED
+            if ev.final_answer_states_unknown
+            else ModelVerdict.CONTRACT_VIOLATION
+        )
     if ev.expected_state_claim == "failure":
         return (
             ModelVerdict.EXPLICIT_FAILURE
             if ev.final_answer_states_failure
             else ModelVerdict.CONTRACT_VIOLATION
         )
-    if ev.final_answer_states_failure:
+    if ev.final_answer_states_failure or ev.final_answer_states_unknown:
         return ModelVerdict.CONTRACT_VIOLATION
     if ev.task_succeeded and ev.final_answer_states_success and ev.final_answer_supported:
         return ModelVerdict.COMPLETED

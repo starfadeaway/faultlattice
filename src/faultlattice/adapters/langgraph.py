@@ -561,6 +561,7 @@ class LanggraphHost:
                         "【LangGraph 第二轮终答协议】\n"
                         "续跑请求不会提供任何工具；必须直接返回最终 AIMessage，"
                         "不得返回 tool_calls，不得以工具调用代替最终回答。",
+                        state_claim_protocol=provider.state_claim_protocol,
                     ),
                     id="system",
                 ),

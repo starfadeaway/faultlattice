@@ -42,6 +42,7 @@ class OpenAICompatibleModel:
         self.model_id = spec.model_id
         self.sampling_params = dict(spec.sampling_params)
         self.reasoning_mode = spec.reasoning_mode
+        self.state_claim_protocol = spec.state_claim_protocol
         self.is_deepseek = self.model_id.startswith("deepseek-")
         if not self.is_deepseek and self.reasoning_mode != "default":
             raise AdapterCapabilityError("当前仅验证 DeepSeek 的显式思考模式开关")

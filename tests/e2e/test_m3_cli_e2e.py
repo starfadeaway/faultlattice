@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 class FakeProvider:
     model_id = "fake-e2e-model"
     sampling_params = {"temperature": 0.0}
+    state_claim_protocol = "directive_failure_v1"
 
     def __init__(self) -> None:
         self.calls = 0

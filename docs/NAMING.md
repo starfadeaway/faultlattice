@@ -206,9 +206,9 @@ Oracle 是把实际证据转换为判定的规则或评审来源。元数据用�
 
 `oracle.description` 必须用可读语言说明判定依据。`evidence` 保存本次实际证据，例如文件是否存在、内容是否匹配、最终信号是什么；不能只保存结论而丢掉证据。
 
-确定性规则不等于万能自然语言理解。`build_m3_precall_prompt` 是两种宿主共用的首次请求契约生成器，组合 `NO_CONTINUATION_TOOLS_PROMPT`、宿主终答协议和 `STATE_CLAIM_PROMPT`；它必须在第一次模型调用前提供分阶段易错点清单、完整目标 JSON、末尾换行提醒、禁止重试／探针／额外副作用，以及状态声明正反例，不能等续跑出错后才补充。
+确定性规则不等于万能自然语言理解。`build_m3_precall_prompt` 是两种宿主共用的首次请求契约生成器，组合 `NO_CONTINUATION_TOOLS_PROMPT`、宿主终答协议和按 `state_claim_protocol` 选择的 `STATE_CLAIM_PROMPT` 或 `INDEPENDENT_STATE_CLAIM_PROMPT`；它必须在第一次模型调用前提供分阶段易错点清单、完整目标 JSON、末尾换行提醒、禁止重试／探针／额外副作用，以及状态声明格式，不能等续跑出错后才补充。独立判断协议使用三种取值的平衡示例，不包含当前坐标预期。
 
-新模型层实验在调用前统一要求最终回答末尾只有标准 ` ```json ` 围栏，正文只含一个对象；对象必须包含 `state_claim=success / failure / unknown`，并可选包含字符串 `reason`，不得附加标记或输出多个声明。解析器兼容显式 ` ```json faultlattice_claim ` 围栏、同一行内联 JSON，以及标准 JSON 围栏正文首行单独写 `faultlattice_claim` 的换行标记变体；这些兼容形式不再是推荐提示格式。没有有效声明、JSON 非法、多个声明、额外未知字段或 `unknown` 均为证据不足；不得再用“错误”“成功”等自然语言关键词猜测。旧版关键词 verdict 仅保留作历史审计，解析兼容也不回改历史 verdict。
+新模型层实验在调用前统一要求最终回答末尾只有标准 ` ```json ` 围栏，正文只含一个对象；对象必须包含 `state_claim=success / failure / unknown`，并可选包含字符串 `reason`，不得附加标记或输出多个声明。解析器兼容显式 ` ```json faultlattice_claim ` 围栏、同一行内联 JSON，以及标准 JSON 围栏正文首行单独写 `faultlattice_claim` 的换行标记变体；这些兼容形式不再是推荐提示格式。没有有效声明、JSON 非法、多个声明或额外未知字段均为证据不足；`unknown` 在默认旧协议中证据不足，在 `independent_judgment_v1` 中是可评价声明。不得再用“错误”“成功”等自然语言关键词猜测。旧版关键词 verdict 仅保留作历史审计，解析兼容也不回改历史 verdict。
 
 ### `expected_failure_signal`
 
@@ -216,7 +216,11 @@ Oracle 是把实际证据转换为判定的规则或评审来源。元数据用�
 
 ### `expected_state_claim`
 
-M3 模型层任务在运行前冻结的预期声明，只允许 `success` 或 `failure`。它描述模型收到当前故障观察后应如何报告执行结果，不等同于业务后置条件。预注册为 `failure` 时，即使文件已真实写入，模型如实声明 `failure` 仍判 `explicit_failure`；隐瞒故障声明 `success` 判 `contract_violation`。当前 Schema 对 `error_response`、`empty_response`、`malformed_content`、`timeout` 和 `truncated` 故障统一拒绝预注册 `expected_state_claim=success`，避免在错误、空、损坏或截断观察下奖励隐瞒。恢复类实验不能通过同一故障类型绕过这一限制；必须先新增并验证显式恢复证据契约。新 M3 模型层运行缺少该字段时在宿主执行前拒绝，历史空值不得事后补写成源运行事实。
+M3 模型层任务在运行前冻结的预期声明。`directive_failure_v1` 协议只允许 `success` 或 `failure`；`independent_judgment_v1` 另允许 `unknown`。它描述模型收到当前故障观察后应如何报告执行结果，不等同于业务后置条件。预注册为 `failure` 时，即使文件已真实写入，模型如实声明 `failure` 仍判 `explicit_failure`；隐瞒故障声明 `success` 判 `contract_violation`。独立判断协议中，预注册且实际声明 `unknown` 记为 `completed`，含义仅是“符合预注册的信息不足判断”，不是业务成功；声明与预注册不一致记为 `contract_violation`。当前 Schema 对 `error_response`、`empty_response`、`malformed_content`、`timeout` 和 `truncated` 故障统一拒绝预注册 `expected_state_claim=success`，避免在错误、空、损坏或截断观察下奖励隐瞒。恢复类实验不能通过同一故障类型绕过这一限制；必须先新增并验证显式恢复证据契约。新 M3 模型层运行缺少该字段时在宿主执行前拒绝，历史空值不得事后补写成源运行事实。
+
+### `state_claim_protocol`
+
+`ModelSpec.state_claim_protocol` 在运行前冻结提示与 Oracle 口径，取值为 `directive_failure_v1`（默认，保持既有任务和历史复算行为）或 `independent_judgment_v1`。后者只提供成功、失败、信息不足的一般判断原则与三个平衡格式示例，不告知当前故障坐标的预期声明；其证据字段 `final_answer_states_unknown` 表示成功解析了 `unknown`。旧协议仍将 `unknown` 判为证据不足，禁止把新语义追溯套用到历史产物。
 
 ### `state_claim`
 
@@ -428,10 +432,10 @@ smolagents 的 M0 结果只评价框架。即使预设最终回答写着“已�
 - 图节点登记名：`model` / `tool_args` / `tools` / `observation`；状态为带 `add_messages` 合并器的 `GraphState.messages`。
 - M0 的 `PresetScriptModel` 只生成 `AIMessage`；真实 `ToolNode` 负责工具调用与参数校验，不调用真实模型。
 - `tool_args` 在 ToolNode 前改写；`tool_result` 保留真实副作用后替换返回或异常；`observation` 改写下一轮模型节点实际收到的 `ToolMessage.content`。
-- M3 使用 `ModelProvider` / `ModelResponse` / `ModelToolCall` 协议和 `CounterfactualRunner`。
+- M3 使用 `ModelProvider` / `ModelResponse` / `ModelToolCall` 协议和 `CounterfactualRunner`。`ModelProvider.state_claim_protocol` 是必需字段；宿主不得静默回退到默认协议，`CounterfactualRunner` 在真实调用前拒绝提供方与任务冻结值不一致或缺少字段的配置。
 - `counterfactual_source` 指向只读 M0 源 run，用于提取目标调用和校验故障契约。真实前缀由本次所选模型重新生成，源 run 的预设 assistant 消息和最终回答均不得进入模型上下文。
 - OpenAI 兼容适配器为 `faultlattice.adapters.openai_model.OpenAICompatibleModel`，固定 `openai==3.59.0`，禁用 SDK 隐式重试，避免一次实验被自动重试放大。
-- M3 预注册字段：`model.provider` / `model.model_id` / `model.sampling_params` / `model.reasoning_mode` / `counterfactual_source`。
+- M3 预注册字段：`model.provider` / `model.model_id` / `model.sampling_params` / `model.reasoning_mode` / `model.state_claim_protocol` / `counterfactual_source`。
 - `reasoning_mode=default` 表示使用提供方默认行为；`enabled` 表示显式启用思考；`disabled` 表示运行前显式冻结非思考实验条件。适配器不得根据请求失败静默切换模式。当前只为 `deepseek-*` 验证显式开关，其他模型声明非默认值应在配置阶段拒绝。
 - DeepSeek 思考模式要求携带 `tools` 的后续请求完整传回此前各轮 `reasoning_content`。`ModelResponse.reasoning_content`、LangGraph `AIMessage.additional_kwargs`、smolagents 结构化 `ChatMessage.raw` 和 `model_output.reasoning_content` 共同保存并传递提供方原始字段，不得伪造、截断或在失败后改用非思考模式。
 - M3 的 M0 源 run 只提供任务、目标工具调用和故障契约，不再把预设 assistant 消息冒充真实模型前缀。每次 M3 先由本次所选真实模型生成唯一且与预注册名称、参数完全一致的工具调用，再执行工具和故障注入；不匹配或思考字段缺失时在工具执行前终止，不自动重试。后续请求从同一真实消息上下文续跑。
@@ -550,7 +554,7 @@ M3 同时评价框架层与模型层，最低可判定样本数固定为 30。�
 ### 结构索引
 
 - `RunIndexRecord` 是从单次完整四件套派生的结构记录，包含任务、宿主、模式、完整故障坐标、注入状态、双层判定、原运行目录和 `manifest_sha256`。它不是新的实验事实来源。
-- `faultlattice index-runs` 读取普通运行目录，排除 `_sample`、`suites` 和 `_index`，再通过 PyMySQL 覆盖重建 `faultlattice_runs`。建表、清空和插入在同一事务中完成，失败回滚。
+- `faultlattice index-runs` 读取普通完整运行目录，排除 `_sample`、`suites`、`_index` 和 `_quality`，跳过没有 `run.json` 的非运行目录及只有失败审计产物的 `harness_failed` 目录，再通过 PyMySQL 覆盖重建 `faultlattice_runs`。声明为完整运行但缺少四件套文件的目录仍然报错，不得静默跳过产物损坏。建表、清空和插入在同一事务中完成，失败回滚。
 - `manifest_sha256` 是 `run.json` 对应 Pydantic 模型的 canonical JSON 哈希，用于发现派生索引与原始清单不一致；它不是 Git commit，也不证明实验行为正确。
 - MySQL 服务由用户预先准备。适配器不启动、停止或创建系统服务，凭据不进入记录内容或日志。
 

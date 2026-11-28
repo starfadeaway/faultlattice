@@ -1,5 +1,6 @@
 """运行索引提取只读四件套，并排除套件状态与公开样例目录。"""
 
+import json
 import shutil
 from pathlib import Path
 
@@ -29,12 +30,27 @@ def test_public_sample_becomes_structured_record_without_changing_source() -> No
     assert before == {path.name: path.read_bytes() for path in SAMPLE.iterdir() if path.is_file()}
 
 
-def test_collect_skips_non_run_directories_and_rejects_incomplete_run(tmp_path: Path) -> None:
+def test_collect_skips_auxiliary_and_failed_runs_but_rejects_damaged_complete_run(
+    tmp_path: Path,
+) -> None:
     runs = tmp_path / "runs"
     shutil.copytree(SAMPLE, runs / SAMPLE.name)
     shutil.copytree(SAMPLE, runs / "_sample" / SAMPLE.name)
     (runs / "suites").mkdir()
     (runs / "_index").mkdir()
+    (runs / "_quality").mkdir()
+    (runs / "empty-output").mkdir()
+    failed = runs / "20261129T000000-failed"
+    shutil.copytree(SAMPLE, failed)
+    (failed / "oracle.jsonl").unlink()
+    (failed / "report.md").unlink()
+    manifest_path = failed / "run.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["run_id"] = failed.name
+    manifest["execution_status"] = "harness_failed"
+    manifest["oracle_sha256"] = None
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
     records = collect_run_records(runs)
     assert [record.run_id for record in records] == [SAMPLE.name]
 

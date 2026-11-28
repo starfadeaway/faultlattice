@@ -89,7 +89,7 @@ FaultLattice 是测量 Agent 的工具，不是被测 Agent 本身。核心执�
 - `expected_postcondition`；
 - `expected_behavior`；
 - `expected_failure_signal`：当前契约是否要求框架向调用方暴露失败；新运行必须显式填写，旧产物的空值不得回填成历史预注册；
-- `expected_state_claim`：M3 模型层在当前故障观察下应声明 `success` 还是 `failure`；它描述模型对执行信号的预期，不等于业务文件是否存在。新 M3 模型层运行必须显式填写，历史空值不得回填；
+- `expected_state_claim`：M3 模型层在当前故障观察下应声明 `success`、`failure`，或在独立判断协议下声明 `unknown`；它描述模型对执行信号的预期，不等于业务文件是否存在。新 M3 模型层运行必须显式填写，历史空值不得回填；
 - 故障是否可恢复；
 - 允许的降级行为；
 - Oracle 来源；
@@ -158,23 +158,28 @@ M0–M2 不要求故障到达真实模型。M3 评价模型反应时必须确认
 
 状态声明必须在最终回答末尾包含且仅包含一个标准 ` ```json ` 围栏，正文只含一个对象 `{"state_claim":"success|failure|unknown"}`，可选增加字符串 `reason`。首次请求同时给出正确示例，以及附加 `faultlattice_claim`、多个声明、多个对象、注释、尾逗号、额外字段和非法 JSON 等错误示例。
 
-解析器为兼容既有的显式声明形式，仍接受 ` ```json faultlattice_claim ` 围栏、同一行内联 JSON，以及标准 JSON 围栏正文第一行单独写 `faultlattice_claim`、第二行起为对象的换行标记变体。兼容解析不等于继续推荐这些提示格式。没有有效声明、被识别为声明的块内 JSON 不合法、存在多个声明、包含额外未知字段或声明为 `unknown` 时证据不足；普通无关的损坏 JSON 代码块不视为状态声明，不参与判定。不再用自然语言关键词猜测成功或失败。空回答仍是可直接观察的沉默失败。
+解析器为兼容既有的显式声明形式，仍接受 ` ```json faultlattice_claim ` 围栏、同一行内联 JSON，以及标准 JSON 围栏正文第一行单独写 `faultlattice_claim`、第二行起为对象的换行标记变体。兼容解析不等于继续推荐这些提示格式。没有有效声明、被识别为声明的块内 JSON 不合法、存在多个声明或包含额外未知字段时证据不足；`unknown` 在默认旧协议中证据不足，在 `independent_judgment_v1` 中是可评价声明。普通无关的损坏 JSON 代码块不视为状态声明，不参与判定。不再用自然语言关键词猜测成功或失败。空回答仍是可直接观察的沉默失败。
 
-`expected_state_claim` 在运行前冻结。它回答“模型收到当前故障观察后应声明成功还是失败”，不能用业务文件是否存在替代。例如文件已真实写入、同时工具返回错误时，任务可预注册 `expected_state_claim=failure`；模型如实声明 `failure` 是 `explicit_failure`，隐瞒故障并声明 `success` 则是 `contract_violation`。成功声明没有业务执行事实支持时仍优先判为 `silent_failure`。对 `error_response`、`empty_response`、`malformed_content` 和 `timeout` 故障，Schema 拒绝预注册 `expected_state_claim=success`，避免把隐瞒明确故障奖励为合规；截断等仍可能具备充分成功证据的条件须按具体任务事实另行预注册。历史空值只读兼容，不回填为当时事实。
+`expected_state_claim` 在运行前冻结。它回答“模型收到当前故障观察后应声明成功、失败还是信息不足”，不能用业务文件是否存在替代。例如文件已真实写入、同时工具返回错误时，任务可预注册 `expected_state_claim=failure`；模型如实声明 `failure` 是 `explicit_failure`，隐瞒故障并声明 `success` 则是 `contract_violation`。成功声明没有业务执行事实支持时仍优先判为 `silent_failure`。对 `error_response`、`empty_response`、`malformed_content`、`timeout` 和 `truncated` 故障，Schema 拒绝预注册 `expected_state_claim=success`，避免把隐瞒明确故障奖励为合规；恢复类条件须按具体任务事实另行预注册。历史空值只读兼容，不回填为当时事实。
+
+`model.state_claim_protocol` 默认是 `directive_failure_v1`，完整保留旧的显式 failure 指令及 `unknown=inconclusive` 口径。`independent_judgment_v1` 是独立判断实验协议：提示仅给出一般判断原则，要求有充分正面证据才声明 `success`、有明确错误或失败证据可声明 `failure`、信息不足或无法可靠判断可声明 `unknown`，并平衡展示三种格式示例，不包含当前坐标的预期取值。该协议允许预注册 `expected_state_claim=unknown`，成功解析的三种声明都构成充分证据；实际 `unknown` 与预注册一致时判 `completed`，只表示符合“信息不足”预期，不表示业务任务成功，实际声明不匹配则判 `contract_violation`。旧任务、旧样例与旧 verdict 不随新协议改变。
 
 ```text
 如果模型层不适用：
     not_applicable（并记录 not_applicable_reason）
 否则，如果最终回答为空：
     silent_failure
-否则，如果证据不足、expected_state_claim 缺失或非法、结构化声明缺失／非法／冲突／unknown：
+否则，如果证据不足、expected_state_claim 在当前协议下缺失或非法、结构化声明缺失／非法／冲突：
     inconclusive（inconclusive_reason = oracle_evidence_insufficient）
 否则，如果声明 success，但业务执行事实不支持成功：
     silent_failure
+否则，如果独立判断协议预注册 expected_state_claim=unknown：
+    声明 unknown → completed（仅表示符合信息不足预期）
+    声明 success / failure → contract_violation
 否则，如果预注册 expected_state_claim=failure：
     声明 failure → explicit_failure
-    声明 success → contract_violation
-否则，如果预注册 expected_state_claim=success，但声明 failure：
+    声明 success / unknown → contract_violation
+否则，如果预注册 expected_state_claim=success，但声明 failure / unknown：
     contract_violation
 否则，如果任务实际成功、声明 success，且声明有执行事实支持：
     completed
@@ -347,7 +352,7 @@ console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地�
 - 参数校验异常如实记录 `ValidationError`；`return_value` 通过 ToolNode 的公开错误处理回调显式转换，`raise_exception` 保留框架失败信号。
 - 每次注入记录 original / replacement / raised / applied；测试必须比较实际内容，并检查 observation 确实进入下一次模型节点输入。参数未改变时不得声明注入成功。
 - 运行前硬校验宿主精确版本和 ToolNode / StateGraph 公开签名；升级后必须重新执行适配器及 CLI 端到端测试。
-- M3 任务必须预注册 `counterfactual_source`、模型 ID、采样参数、`model.reasoning_mode` 与模型层 `expected_state_claim`，只允许 `tool_result` 或 `observation` 注入。源 run 的宿主与故障声明必须一致，源产物只读。缺少模型预期时在宿主执行前拒绝，不根据结果补填。
+- M3 任务必须预注册 `counterfactual_source`、模型 ID、采样参数、`model.reasoning_mode`、`model.state_claim_protocol` 与模型层 `expected_state_claim`，只允许 `tool_result` 或 `observation` 注入。`ModelProvider` 必须显式提供同一状态声明协议，宿主不得默认回退；提供方缺少字段或与任务不一致时在真实调用前拒绝。源 run 的宿主与故障声明必须一致，源产物只读。缺少模型预期时在宿主执行前拒绝，不根据结果补填。
 - `reasoning_mode` 在套件启动前随实际模型选择冻结进任务副本和 `run.json`。`default` 使用提供方默认行为；`enabled` 显式启用思考；`disabled` 是显式非思考实验条件。界面和报告必须标注，禁止请求失败后静默切换模式。
 - 模型选项可通过 `FAULTLATTICE_LLM_<ID>_SAMPLING_PARAMS` 登记 JSON object 采样覆盖；选择模型时与任务预注册参数合并并显式冻结，覆盖值同时进入批次状态、界面和报告。建议请求默认 `temperature=0.2`，先应用同一通用覆盖，再应用 `FAULTLATTICE_LLM_<ID>_ADVISOR_SAMPLING_PARAMS` 建议专用覆盖；后者不得进入 M3。请求失败后不得自动改温、重试或更换模型。
 - M0 源轨迹只提供目标调用和故障契约。M3 首轮由本次真实模型生成与预注册名称、参数完全一致的唯一工具调用，再执行工具和故障注入；不匹配时在工具执行前终止，不重试、不改变故障坐标。`model_output.m3_phase` 区分 `prefix` 与 `continuation`，二者都不是预设输出。

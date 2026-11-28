@@ -271,6 +271,7 @@ def test_m3_model_choice_is_frozen_before_background_start_without_leaking_secre
     assert state["model_id"] == "deepseek-example"
     assert state["model_reasoning_mode"] == "enabled"
     assert state["model_sampling_params"] == {"temperature": 0.0}
+    assert state["tasks"][0]["state_claim_protocol"] == "directive_failure_v1"
     frozen_task = threads[0].args[2][0]
     assert frozen_task.model.model_id == "deepseek-example"
     assert frozen_task.model.reasoning_mode == "enabled"
@@ -323,6 +324,7 @@ def test_llm_cross_batch_analysis_uses_aggregate_evidence_without_persistence(
     prompt = advisor.messages[1]["content"]
     assert "faultlattice-analysis" in prompt
     assert '"task_groups"' in prompt
+    assert '"state_claim_protocol":"not_applicable"' in prompt
     assert '"explicit_failure":1' in prompt
     assert '"events"' not in prompt
     assert str(tmp_path) not in prompt

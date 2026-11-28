@@ -37,7 +37,7 @@ import { downloadMarkdown } from "../utils/downloadMarkdown"
 import { formatDateTime } from "../utils/dateTime"
 
 const verdictLabels: Record<string, string> = {
-  completed: "正常完成",
+  completed: "符合预注册",
   explicit_failure: "显式失败",
   silent_failure: "沉默失败",
   contract_violation: "契约违反",
@@ -61,6 +61,7 @@ interface TaskAggregate {
   taskId: string
   host: string
   mode: string
+  protocol: string
   total: number
   completed: number
   failed: number
@@ -91,6 +92,27 @@ function verdictOf(judgement: Record<string, unknown>): string {
 
 function layerOf(judgement: Record<string, unknown>): string {
   return judgement.layer === "model" ? "model" : "framework"
+}
+
+function evidenceOf(judgement: Record<string, unknown>): Record<string, unknown> {
+  return judgement.evidence && typeof judgement.evidence === "object" && !Array.isArray(judgement.evidence)
+    ? judgement.evidence as Record<string, unknown>
+    : {}
+}
+
+function protocolOfTask(task: SuiteRun["tasks"][number]): string {
+  if (task.state_claim_protocol) return task.state_claim_protocol
+  const recorded = task.judgements.map((judgement) => evidenceOf(judgement).state_claim_protocol)
+    .find((value): value is string => typeof value === "string" && Boolean(value))
+  return recorded || (task.mode === "M3" ? "directive_failure_v1" : "not_applicable")
+}
+
+function protocolLabel(protocol: string): string {
+  return {
+    directive_failure_v1: "强指令声明",
+    independent_judgment_v1: "独立判断",
+    not_applicable: "不适用",
+  }[protocol] || protocol
 }
 
 function percent(value: number, total: number): string {
@@ -246,6 +268,12 @@ export function AnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, m
   const silentFailures = judgements.filter((judgement) => verdictOf(judgement) === "silent_failure").length
   const explicitFailures = judgements.filter((judgement) => verdictOf(judgement) === "explicit_failure").length
   const contractViolations = judgements.filter((judgement) => verdictOf(judgement) === "contract_violation").length
+  const independentUnknownCompleted = judgements.filter((judgement) => {
+    const evidence = evidenceOf(judgement)
+    return layerOf(judgement) === "model" && verdictOf(judgement) === "completed"
+      && evidence.state_claim_protocol === "independent_judgment_v1"
+      && evidence.expected_state_claim === "unknown"
+  }).length
   const harnessErrors = filteredTasks.filter(({ task }) => task.status === "failed").length
   const distribution = verdictOrder.map((verdict) => ({
     verdict,
@@ -257,11 +285,13 @@ export function AnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, m
   const taskAggregates = useMemo(() => {
     const groups = new Map<string, TaskAggregate>()
     filteredTasks.forEach(({ task }) => {
-      const key = `${task.task_id}|${task.host}|${task.mode}`
+      const protocol = protocolOfTask(task)
+      const key = `${task.task_id}|${task.host}|${task.mode}|${protocol}`
       const group = groups.get(key) || {
         taskId: task.task_id,
         host: task.host,
         mode: task.mode,
+        protocol,
         total: 0,
         completed: 0,
         failed: 0,
@@ -337,14 +367,17 @@ export function AnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, m
     if (insufficient) {
       result.push({ tone: "info", title: `${insufficient} 条判定证据不足`, detail: "它们已从可判定比例的分母排除。若占比较高，应补充观察点或重跑，不应强行计入成功或失败。" })
     }
+    if (independentUnknownCompleted) {
+      result.push({ tone: "info", title: `${independentUnknownCompleted} 条 completed 仅表示符合信息不足预注册`, detail: "独立判断协议下，预注册与实际声明均为 unknown 时判 completed；这不是业务成功，也不能与默认协议混在同一任务聚合中。" })
+    }
     if (!silentFailures && !contractViolations && !explicitFailures && evaluable.length) {
-      result.push({ tone: "good", title: "当前可判定结果均为正常完成", detail: `结论只覆盖 ${evaluable.length} 条可判定 Oracle，不代表其他任务、模型或未测故障同样正常。` })
+      result.push({ tone: "good", title: "当前可判定结果均符合预注册", detail: `结论只覆盖 ${evaluable.length} 条可判定 Oracle，不代表业务成功，也不代表其他任务、模型或未测故障同样符合预期。` })
     }
     if (result.length === 0) {
       result.push({ tone: "info", title: "暂无可判定行为结论", detail: "当前只有不适用或未知判定；请调整 Oracle 层级，或检查实验是否已产生有效证据。" })
     }
     return result.slice(0, 5)
-  }, [contractViolations, evaluable.length, explicitFailures, filteredTasks.length, harnessErrors, judgements, silentFailures, taskAggregates, trendData])
+  }, [contractViolations, evaluable.length, explicitFailures, filteredTasks.length, harnessErrors, independentUnknownCompleted, judgements, silentFailures, taskAggregates, trendData])
 
   const selections = useMemo(() => filteredTasks.map(({ run, task }) => ({ batch_id: run.batch_id, task_id: task.task_id })), [filteredTasks])
   const scopeKey = useMemo(() => JSON.stringify({ selections, layer }), [selections, layer])
@@ -415,9 +448,9 @@ export function AnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, m
       "",
       "## 任务对比",
       "",
-      "| 任务 | 宿主 | 模式 | 执行完成 | Harness 错误 | 正常完成 | 显式失败 | 沉默失败 | 契约违反 | 证据不足 |",
-      "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-      ...taskAggregates.map((group) => `| ${markdownCell(group.taskId)} | ${markdownCell(group.host)} | ${group.mode} | ${group.completed}/${group.total} | ${group.failed} | ${group.verdicts.completed || 0} | ${group.verdicts.explicit_failure || 0} | ${group.verdicts.silent_failure || 0} | ${group.verdicts.contract_violation || 0} | ${group.verdicts.inconclusive || 0} |`),
+      "| 任务 | 宿主 | 模式 | 状态声明协议 | 执行完成 | Harness 错误 | 符合预注册 | 显式失败 | 沉默失败 | 契约违反 | 证据不足 |",
+      "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+      ...taskAggregates.map((group) => `| ${markdownCell(group.taskId)} | ${markdownCell(group.host)} | ${group.mode} | ${group.protocol} | ${group.completed}/${group.total} | ${group.failed} | ${group.verdicts.completed || 0} | ${group.verdicts.explicit_failure || 0} | ${group.verdicts.silent_failure || 0} | ${group.verdicts.contract_violation || 0} | ${group.verdicts.inconclusive || 0} |`),
       "",
       "## 批次索引",
       "",
@@ -483,6 +516,7 @@ export function AnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, m
             <div className={silentFailures ? "is-risk" : ""}><strong>{silentFailures}</strong><span>沉默失败</span><small>{percent(silentFailures, evaluable.length)} · 当前可判定结果</small></div>
           </div>
 
+          {independentUnknownCompleted > 0 && <Alert type="info" showIcon title={`${independentUnknownCompleted} 条 completed 表示符合信息不足预注册`} description="独立判断协议下，预注册与实际声明均为 unknown 时得到 completed；这不是业务成功。任务对比已按协议拆分，不与默认强指令协议混合。" />}
           {harnessErrors > 0 && <Alert type="warning" showIcon title={`当前范围有 ${harnessErrors} 个 Harness 执行错误`} description="这些任务不计作被测 Agent 的有效故障行为样本，请回到实验页检查适配器、模型或配置错误。" />}
 
           <section className="analysis-panel analysis-insights" aria-labelledby="rule-analysis-heading">
@@ -617,11 +651,12 @@ export function AnalyticsView({ defaultAdvisorOptionId, onAdvisorOptionChange, m
             {!taskAggregates.length ? <Empty description="没有匹配任务" /> : (
               <div className="analysis-table-wrap">
                 <table className="analysis-table">
-                  <thead><tr><th>任务 / 宿主</th><th>执行完成</th><th>Harness 错误</th><th>正常完成</th><th>显式失败</th><th>沉默失败</th><th>契约违反</th><th>证据不足</th></tr></thead>
+                  <thead><tr><th>任务 / 宿主</th><th>状态声明协议</th><th>执行完成</th><th>Harness 错误</th><th>符合预注册</th><th>显式失败</th><th>沉默失败</th><th>契约违反</th><th>证据不足</th></tr></thead>
                   <tbody>
                     {taskAggregates.map((group) => (
-                      <tr key={`${group.taskId}|${group.host}|${group.mode}`}>
+                      <tr key={`${group.taskId}|${group.host}|${group.mode}|${group.protocol}`}>
                         <td><strong>{group.taskId}</strong><span>{group.host} · {group.mode}</span></td>
+                        <td><Tag color={group.protocol === "independent_judgment_v1" ? "purple" : "default"}>{protocolLabel(group.protocol)}</Tag><span><code>{group.protocol}</code></span></td>
                         <td>{group.completed}/{group.total}</td>
                         <td>{group.failed || "—"}</td>
                         <td>{group.verdicts.completed || 0}</td>

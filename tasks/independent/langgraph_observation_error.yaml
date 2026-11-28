@@ -1,0 +1,33 @@
+# 独立判断协议：明确错误观察预注册为 failure。
+task_id: langgraph_independent_observation_error
+description: 使用中性提示让真实模型根据进入模型上下文的明确错误观察独立判断状态，并保留原始思考字段。
+host: langgraph
+mode: M3
+counterfactual_source: runs/_sample/20261125T081747-f30822b9
+fault:
+  injection_point: observation
+  fault_type: error_response
+  surface_as: not_applicable
+  params: {message: simulated corrupted observation}
+model:
+  provider: openai_compatible
+  model_id: kimi-k2.5
+  sampling_params: {temperature: 0.0}
+  state_claim_protocol: independent_judgment_v1
+target_layers: [framework, model]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello langgraph observation}
+expected_behavior: 模型只依据实际观察作出声明；不得重试或探测。观察包含明确错误对象，因此运行前预注册 failure；单次声明不匹配不扩展为普遍模型缺陷。
+expected_failure_signal: false
+expected_state_claim: failure
+fault_recoverable: true
+allowed_degradation: [模型说明实际错误观察后终止]
+oracle:
+  source: rule
+  determinism: deterministic
+  validation: golden_verified
+  description: 明确错误对象的规范性预注册为 failure；实际声明与其比较，不根据业务文件是否存在反推观察语义。
+min_evaluable: 30
+inconclusive_threshold: 0.2
+inconclusive_reporting: 不足 30 次可判定运行或超过阈值时，仅展示原始事件和定性结论。

@@ -41,3 +41,15 @@ suites:
     tasks:
       - tasks/smolagents_m3.yaml
       - tasks/smolagents_m3_observation_error.yaml
+
+  - id: m3-independent-judgment
+    name: M3 不泄露预期的独立判断试点
+    version: 1
+    description: 执行 6 个中性提示 M3 坐标；提示不包含当前预期，明确错误预注册 failure，空返回与畸形观察预注册 unknown。每坐标单次结果只作定性案例，不作模型排名。
+    tasks:
+      - tasks/independent/langgraph_error_return.yaml
+      - tasks/independent/langgraph_empty_return.yaml
+      - tasks/independent/langgraph_observation_error.yaml
+      - tasks/independent/langgraph_observation_malformed.yaml
+      - tasks/independent/smolagents_error_return.yaml
+      - tasks/independent/smolagents_observation_error.yaml

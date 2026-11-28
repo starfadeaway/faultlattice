@@ -8,6 +8,7 @@ runs/*
 external_agents/uploads/
 external_agents/drafts/
 .verify/
+reviews/
 external_projects/
 
 # Python / 工具链

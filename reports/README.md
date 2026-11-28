@@ -6,6 +6,8 @@
 
 | 日期 | 报告 | 被测宿主及版本 | 一句话结论 | 链接 |
 |---|---|---|---|---|
+| 2026-11-29 | 第五轮模型审查事实核对与修复记录 | FaultLattice / LangGraph / smolagents / 控制台 | 修复提供方协议回退、运行索引阻断、控制台协议维度与评审附件隐私；370 项测试及前后端门禁通过，恢复契约与外部服务复验仍保留。 | [第五轮处置](external/2026-11-29-fifth-round-review-triage.md) |
+| 2026-11-29 | 不泄露预期取值的 M3 独立判断试点 | LangGraph 1.2.24 / smolagents 1.26.0 / 三模型 | 18 个新冻结坐标中 15 个完整复算，9 次 failure、6 次 unknown、3 次 Harness 失败；仅作单次定性案例，不作模型排名。 | [独立判断试点](external/2026-11-29-independent-judgment-pilot.md) |
 | 2026-11-29 | 第四轮模型审查事实核对与修复记录 | FaultLattice / LangGraph 可控回归 | 修复 Harness 异常时阻断证据丢失，增加失败清单与部分轨迹；补齐截断预注册限制、声明缺失原因码及历史报告解释边界。 | [第四轮处置](external/2026-11-29-fourth-round-review-triage.md) |
 | 2026-11-28 | 首轮易错点契约 M3 三模型重跑验收 | LangGraph 1.2.24 / smolagents / 三模型 | 新冻结 18 个坐标全部完成并公开复算，全部使用标准 JSON 且只有一次目标写入；结论限于强提示协议合规，不证明独立故障判断。 | [首轮契约重跑](external/2026-11-28-m3-precall-contract-rerun.md) |
 | 2026-11-28 | 第三轮模型审查事实核对与处理顺序 | FaultLattice 当前工作区 | 核实提示词预期泄露、任务文本与 unknown 语义、上传白名单、AST、预检选择及 63 份私有旧报告；区分当前问题与过时状态。 | [第三轮审查清单](external/2026-11-28-third-round-review-triage.md) |

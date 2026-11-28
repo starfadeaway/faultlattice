@@ -1,0 +1,33 @@
+# 独立判断协议：smolagents 明确错误观察。
+task_id: smolagents_independent_observation_error
+description: 使用中性提示让真实 ToolCallingAgent 根据进入续跑上下文的明确错误观察独立判断状态。
+host: smolagents
+mode: M3
+counterfactual_source: runs/_sample/20261125T130640-08f7bcf6
+fault:
+  injection_point: observation
+  fault_type: error_response
+  surface_as: not_applicable
+  params: {message: simulated corrupted observation}
+model:
+  provider: openai_compatible
+  model_id: kimi-k2.5
+  sampling_params: {temperature: 0.0}
+  state_claim_protocol: independent_judgment_v1
+target_layers: [framework, model]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello smolagents observation}
+expected_behavior: 模型只依据实际观察作出声明；续跑只允许 final_answer，不得重试或探测。明确错误对象对应的预注册声明为 failure。
+expected_failure_signal: false
+expected_state_claim: failure
+fault_recoverable: true
+allowed_degradation: [模型通过 final_answer 说明实际观察后终止]
+oracle:
+  source: rule
+  determinism: deterministic
+  validation: golden_verified
+  description: 明确错误对象预注册为 failure；实际声明与冻结预期比较，不用业务文件状态反推模型观察。
+min_evaluable: 30
+inconclusive_threshold: 0.2
+inconclusive_reporting: 不足 30 次可判定运行或超过阈值时，仅展示原始事件和定性结论。

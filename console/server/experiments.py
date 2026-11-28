@@ -61,6 +61,20 @@ class AnalysisRequest(BaseModel):
     model_option_id: str | None = None
 
 
+def _task_state_claim_protocol(task: dict[str, Any]) -> str:
+    """兼容旧套件历史；优先使用任务冻结值，其次读取模型 Oracle 证据。"""
+    frozen = task.get("state_claim_protocol")
+    if isinstance(frozen, str) and frozen:
+        return frozen
+    for judgement in task.get("judgements", []):
+        evidence = judgement.get("evidence")
+        if isinstance(evidence, dict):
+            protocol = evidence.get("state_claim_protocol")
+            if isinstance(protocol, str) and protocol:
+                return protocol
+    return "directive_failure_v1" if task.get("mode") == "M3" else "not_applicable"
+
+
 class ExperimentService:
     """本地单工作区实验服务；同一时刻只执行一个套件，避免资源争用。"""
 
@@ -339,6 +353,9 @@ class ExperimentService:
                         "task_path": path,
                         "host": task.host,
                         "mode": task.mode.value,
+                        "state_claim_protocol": (
+                            task.model.state_claim_protocol if task.model is not None else None
+                        ),
                         "status": "pending",
                         "run_id": None,
                         "error": None,
@@ -469,6 +486,7 @@ class ExperimentService:
             "disabled": "非思考模式（显式实验条件，不得外推为思考表现）",
             "default": "提供方默认（DeepSeek 当前默认思考，原始字段逐轮回传）",
         }.get(reasoning_mode, "未使用")
+        protocols = sorted({_task_state_claim_protocol(task) for task in state["tasks"]})
         lines = [
             f"# FaultLattice 套件报告 {state['batch_id']}",
             "",
@@ -484,6 +502,7 @@ class ExperimentService:
             if state.get("external_agent") else "- 外部适配器：N/A",
             f"- 真实模型：{state.get('model_label') or '未使用'}；模型 ID：{state.get('model_id') or 'N/A'}",
             f"- 思考模式：{reasoning_label}",
+            "- 状态声明协议：" + ", ".join(protocols),
             "- 冻结采样参数："
             + canonical_dumps(state.get("model_sampling_params"))
             if state.get("model_id") else "- 冻结采样参数：N/A",
@@ -496,18 +515,21 @@ class ExperimentService:
             f"- 开始时间：{state['started_at']}",
             f"- 结束时间：{state['finished_at']}",
             "",
-            "| 任务 | 宿主 | 模式 | Harness 状态 | run_id | 错误 |",
-            "|---|---|---|---|---|---|",
+            "| 任务 | 宿主 | 模式 | 状态声明协议 | Harness 状态 | run_id | 错误 |",
+            "|---|---|---|---|---|---|---|",
         ]
         for task in state["tasks"]:
             lines.append(
                 f"| {task['task_id']} | {task['host']} | {task['mode']} | "
-                f"{task['status']} | {task['run_id'] or 'N/A'} | {task['error'] or ''} |"
+                f"{_task_state_claim_protocol(task)} | {task['status']} | "
+                f"{task['run_id'] or 'N/A'} | {task['error'] or ''} |"
             )
         lines.extend(
             [
                 "",
-                "说明：completed 表示实验和复算完成，不等于被测 Agent 没有缺陷；",
+                "说明：Harness completed 表示实验和复算完成，不等于被测 Agent 没有缺陷；",
+                "独立判断协议中，预注册与实际声明均为 unknown 的模型层 completed "
+                "仅表示符合信息不足预期，不表示业务成功；",
                 "框架层与模型层判定请查看对应 run 的 oracle.jsonl 和 report.md。",
                 "",
             ]
@@ -669,13 +691,15 @@ class ExperimentService:
                     totals["harness_error_types"].get(error_type, 0) + 1
                 )
 
-            group_key = f"{task['task_id']}|{task['host']}|{task['mode']}"
+            protocol = _task_state_claim_protocol(task)
+            group_key = f"{task['task_id']}|{task['host']}|{task['mode']}|{protocol}"
             group = groups.setdefault(
                 group_key,
                 {
                     "task_id": task["task_id"],
                     "host": task["host"],
                     "mode": task["mode"],
+                    "state_claim_protocol": protocol,
                     "executions": 0,
                     "harness_completed": 0,
                     "harness_failed": 0,

@@ -90,6 +90,7 @@ export interface ExperimentTaskDetail {
     model_id: string
     sampling_params: Record<string, unknown>
     reasoning_mode: ReasoningMode
+    state_claim_protocol?: "directive_failure_v1" | "independent_judgment_v1"
   } | null
 }
 
@@ -111,6 +112,7 @@ export interface SuiteTaskResult {
   task_path: string
   host: string
   mode: string
+  state_claim_protocol?: "directive_failure_v1" | "independent_judgment_v1" | null
   status: "pending" | "running" | "completed" | "failed"
   run_id: string | null
   error: string | null

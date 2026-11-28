@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from faultlattice.errors import ConfigurationError
 
@@ -190,6 +190,17 @@ class ModelSpec(BaseModel):
     model_id: str = Field(min_length=1)
     sampling_params: dict[str, Any] = Field(default_factory=dict)
     reasoning_mode: Literal["default", "enabled", "disabled"] = "default"
+    state_claim_protocol: Literal["directive_failure_v1", "independent_judgment_v1"] = (
+        "directive_failure_v1"
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_legacy_default_protocol(self, handler: Any) -> dict[str, Any]:
+        """默认协议不进入序列化，保持历史任务指纹与公开报告逐字可复算。"""
+        data = dict(handler(self))
+        if data.get("state_claim_protocol") == "directive_failure_v1":
+            data.pop("state_claim_protocol")
+        return data
 
 
 class TaskDefinition(BaseModel):
@@ -206,9 +217,9 @@ class TaskDefinition(BaseModel):
     expected_behavior: str
     # 新运行必须显式冻结；None 仅用于读取旧版历史 run.json。
     expected_failure_signal: bool | None = None
-    # 模型依据实际收到的工具观察应声明成功还是失败；与业务后置条件分开评价。
+    # 模型依据实际收到的工具观察应声明成功、失败或信息不足；与业务后置条件分开评价。
     # 新 M3 模型层运行必须显式冻结，历史空值不得回填成当时事实。
-    expected_state_claim: Literal["success", "failure"] | None = None
+    expected_state_claim: Literal["success", "failure", "unknown"] | None = None
     fault_recoverable: bool
     allowed_degradation: list[str] = Field(default_factory=list)
     oracle: OracleSpec
@@ -239,6 +250,14 @@ class TaskDefinition(BaseModel):
                 InjectionPoint.OBSERVATION,
             ):
                 raise ConfigurationError("M3 只支持 tool_result / observation 故障")
+            if (
+                self.expected_state_claim == "unknown"
+                and self.model.state_claim_protocol != "independent_judgment_v1"
+            ):
+                raise ConfigurationError(
+                    f"任务 {self.task_id}: expected_state_claim=unknown 只允许 "
+                    "state_claim_protocol=independent_judgment_v1"
+                )
             unambiguous_failures = {
                 FaultType.TIMEOUT,
                 FaultType.EMPTY_RESPONSE,

@@ -1,0 +1,33 @@
+# 独立判断协议：smolagents 明确错误工具返回。
+task_id: smolagents_independent_error_return
+description: 使用中性提示让真实 ToolCallingAgent 根据明确错误工具返回独立判断状态，并保留结构化工具调用与思考字段。
+host: smolagents
+mode: M3
+counterfactual_source: runs/_sample/20261125T130640-7ce35788
+fault:
+  injection_point: tool_result
+  fault_type: error_response
+  surface_as: return_value
+  params: {message: simulated tool failure after write}
+model:
+  provider: openai_compatible
+  model_id: kimi-k2.5
+  sampling_params: {temperature: 0.0}
+  state_claim_protocol: independent_judgment_v1
+target_layers: [framework, model]
+expected_postcondition:
+  kind: file_written
+  params: {path: output/hello.txt, content_contains: hello smolagents}
+expected_behavior: 模型只依据实际工具观察作出声明；续跑只允许 final_answer，不得重试或探测。明确错误对象对应的预注册声明为 failure。
+expected_failure_signal: false
+expected_state_claim: failure
+fault_recoverable: true
+allowed_degradation: [模型通过 final_answer 说明实际观察后终止]
+oracle:
+  source: rule
+  determinism: deterministic
+  validation: golden_verified
+  description: 明确错误对象预注册为 failure；必须实际调用并收到故障观察才可评价。
+min_evaluable: 30
+inconclusive_threshold: 0.2
+inconclusive_reporting: 不足 30 次可判定运行或超过阈值时，仅展示原始事件和定性结论。

@@ -38,6 +38,7 @@ class FakeProvider:
 
     model_id = "fake-smolagents-m3"
     sampling_params = {"temperature": 0.0}
+    state_claim_protocol = "directive_failure_v1"
     requires_reasoning_content = True
 
     def __init__(
@@ -289,6 +290,7 @@ def test_m3_provider_error_is_not_converted_to_injected_failure(tmp_path: Path) 
     class FailingProvider:
         model_id = "failing-provider"
         sampling_params: dict[str, Any] = {}
+        state_claim_protocol = "directive_failure_v1"
 
         def generate(self, messages, *, tools) -> ModelResponse:
             del messages, tools

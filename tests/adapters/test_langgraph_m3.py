@@ -33,8 +33,10 @@ class FakeProvider:
         reasoning_content: str | None = "第一轮真实思考",
         requires_reasoning_content: bool = False,
         matching_prefix: bool = True,
+        state_claim_protocol: str = "directive_failure_v1",
     ) -> None:
         self.answer = answer
+        self.state_claim_protocol = state_claim_protocol
         self.reasoning_content = reasoning_content
         self.requires_reasoning_content = requires_reasoning_content
         self.matching_prefix = matching_prefix
@@ -234,3 +236,15 @@ def test_m3_precall_contract_removes_tools_and_blocks_extra_write(tmp_path: Path
     assert "【LangGraph 第二轮终答协议】" in system
     assert (tmp_path / "output" / "hello.txt").is_file()
     assert not (tmp_path / "output" / "probe.txt").exists()
+
+
+def test_custom_provider_uses_independent_prompt_without_silent_fallback(tmp_path: Path) -> None:
+    provider = FakeProvider(state_claim_protocol="independent_judgment_v1")
+    LanggraphHost().run_counterfactual(
+        PREFIX, fault=_fault(), sandbox=tmp_path, model_provider=provider
+    )
+
+    system = provider.calls[0]["messages"][0]["content"]
+    assert "【状态判断与声明格式｜根据实际观察独立判断】" in system
+    assert "收到错误、空或损坏的工具观察时必须声明 failure" not in system
+    assert system.count('{"state_claim":"unknown"') == 1

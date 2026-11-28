@@ -416,6 +416,7 @@ export function ExperimentsView({
                     <div><dt>故障</dt><dd><code>{task.fault ? `${String(task.fault.injection_point)} / ${String(task.fault.fault_type)} / ${String(task.fault.surface_as)}` : "无故障基线"}</code></dd></div>
                     <div><dt>最低可判定样本</dt><dd>{task.min_evaluable}</dd></div>
                     {task.model && <div><dt>预注册默认模型</dt><dd><code>{task.model.model_id}</code> · {reasoningModeLabel(task.model.reasoning_mode, task.model.model_id)} · {JSON.stringify(task.model.sampling_params)}<small>启动前可在上方选择已配置模型；实际模型、思考模式与最终采样参数会冻结进本次运行。</small></dd></div>}
+                    {task.model && <div><dt>状态声明协议</dt><dd><code>{task.model.state_claim_protocol || "directive_failure_v1"}</code><small>{task.model.state_claim_protocol === "independent_judgment_v1" ? "中性提示不泄露当前坐标预期；符合 unknown 预注册不等于业务成功。" : "默认强指令协议；历史任务与复算口径保持不变。"}</small></dd></div>}
                   </dl>
                   <strong>预期行为</strong><p>{task.expected_behavior}</p>
                   <strong>后置条件</strong><pre>{JSON.stringify(task.expected_postcondition, null, 2)}</pre>
@@ -535,12 +536,23 @@ function TaskTrace({ task, advisorConfigured, advisorModelId, adviceLoading, onG
   const postconditionDescription = fileAbsent
     ? `沙箱文件 ${String(postcondition?.path)}：${postcondition?.exists ? "存在" : "不存在"}；本任务要求超时后不得写入。该检查直接核对实际文件状态，不依赖子进程是否返回结果。`
     : `沙箱文件 ${String(postcondition?.path)}：${postcondition?.exists ? "存在" : "不存在"}；内容匹配：${typeof postcondition?.content_contains_ok === "boolean" ? (postcondition.content_contains_ok ? "是" : "否") : "未要求"}。该检查由 Harness 在运行结束后直接执行，不依赖模型是否拥有读取工具。下方模型自述中的“未验证”只表示模型自身无法读回确认。`
+  const protocol = task.state_claim_protocol || (task.mode === "M3" ? "directive_failure_v1" : null)
+  const independentUnknownCompleted = task.judgements.some((judgement) => {
+    const evidence = judgement.evidence && typeof judgement.evidence === "object" && !Array.isArray(judgement.evidence)
+      ? judgement.evidence as Record<string, unknown>
+      : {}
+    return judgement.layer === "model" && judgement.verdict === "completed"
+      && evidence.state_claim_protocol === "independent_judgment_v1"
+      && evidence.expected_state_claim === "unknown"
+  })
   return (
     <div className="task-trace">
       <div className="trace-meta">
         <span><CheckCircleOutlined /> {task.host} · {task.mode}</span>
+        {protocol && <code>状态声明协议：{protocol}</code>}
         <code>{task.run_id || "尚未生成 run_id"}</code>
       </div>
+      {independentUnknownCompleted && <Alert type="info" showIcon title="符合信息不足预注册，不代表业务成功" description="模型声明 unknown 与运行前冻结的 unknown 预期一致；completed 只描述这一契约结果，不能当作正常业务完成。" />}
       {task.error && <Alert type="error" showIcon title="Harness 执行错误" description={task.error} />}
       {task.status === "running" && <div className="trace-waiting"><Spin size="small" /> 正在执行真实宿主；事件落盘后自动显示。</div>}
       {task.status === "pending" && <Empty description="等待前序任务完成" />}

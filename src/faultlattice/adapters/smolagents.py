@@ -609,6 +609,7 @@ class SmolagentsHost:
                 "【smolagents 第二轮终答协议】\n"
                 "续跑请求只提供 final_answer；必须且只能调用一次 final_answer，"
                 "answer 是完整最终回答；不得以普通文本结束，不得同时调用其它工具。",
+                state_claim_protocol=provider.state_claim_protocol,
             )
         try:
             answer = agent.run(prompt)

@@ -172,7 +172,13 @@ def collect_run_records(runs_root: Path) -> list[RunIndexRecord]:
         raise ConfigurationError(f"runs_root 不是目录: {runs_root}")
     records = []
     for path in sorted(runs_root.iterdir(), key=lambda item: item.name):
-        if not path.is_dir() or path.name in {"_sample", "suites", "_index"}:
+        if not path.is_dir() or path.name in {"_sample", "suites", "_index", "_quality"}:
+            continue
+        if not (path / "run.json").is_file():
+            # 空目录和正在初始化的目录不是可索引运行；完整运行缺文件仍在下方报错。
+            continue
+        if load_manifest(path).execution_status == "harness_failed":
+            # 失败审计只有 run.json + steps.jsonl，不能伪装成完整四件套。
             continue
         records.append(load_run_index_record(path))
     return records
