@@ -78,23 +78,24 @@ uv run pytest tests/meta/test_public_samples.py -q
 
 ## 四、最近一次验收结果
 
+- 第五轮核心修复：模型提供方必须显式声明 `state_claim_protocol`，任务与提供方协议不一致时在真实模型调用前拒绝；运行索引排除 `_quality`、空目录和 `harness_failed` 审计目录，同时继续拒绝损坏的完整运行。处理记录见 `reports/external/2026-11-29-fifth-round-review-triage.md`。
+- 控制台与报告已补齐协议维度：实验页、套件报告、分析页和 LLM 聚合证据按协议区分；独立判断中的 `completed` 明示为“符合预注册”，unknown 情形不代表业务成功。新增 `m3-independent-judgment` 套件和 6 个公开预注册任务，仅验证可加载，未自动调用模型。
+- 独立判断试点保持原始判定：18 次中 15 个完整复算、3 个 Harness 失败；9 个 failure、6 个 unknown，1 个预注册不匹配。每坐标一次，不作模型排名、稳定比例或因果归因。5 个 unknown 完整运行的派生报告只修复展示措辞，原始三件产物与 verdict 未改。
 - 第四轮核心修复：内置宿主异常时保留 `run.json + steps.jsonl`，清单标记 `execution_status=harness_failed` 并记录异常和轨迹哈希；控制台可通过 `run_id` 找回失败目录。失败审计产物不生成 Oracle、不冒充完整四件套、不计入有效样本。处理记录见 `reports/external/2026-11-29-fourth-round-review-triage.md`。
 - 可控 LangGraph 回归证明：续跑违规业务工具调用在执行前阻断后，`blocked_tool_calls`、工具边界、目标写入、故障注入、失败 `run_end` 和异常 `run_id` 均已落盘；探针文件不存在。该测试使用伪模型，不是新增真实模型实验。
-- 第四轮配套修复：`truncated` 故障不得预注册成功声明；新运行用 `state_claim_error` 区分空回答与未找到声明；历史 M3 报告增加 Post-fix note，并明确第二批零额外写入受续跑工具边界结构性约束。
 - 首轮易错点契约真实 M3 重跑仍是：18/18 完成并生成四件套，18 个模型层均为 `explicit_failure`，0 个 Harness 错误；18 个单次公开副本复算通过，3 份模型聚合报告为本地非公开审计产物。
-- 解释限制：提示词直接规定错误／空／损坏观察声明 `failure`，续跑又移除了业务工具，因此这批结果只证明强提示与工具约束下的协议合规，不证明模型独立故障判断或自行学会不重试；每个坐标一次，不做稳定比例或模型排名。
-- 第三轮直接工程修复已落地：YAML 上传白名单、预检默认任务选择、常见进程调用与导入别名 AST 防护、故障 M3 预注册一致性、合规任务文字和文档口径。处理记录见 `reports/external/2026-11-28-third-round-review-triage.md`。
-- 最新完整测试：348 passed；第四轮失败路径、M3 Schema、双宿主适配器与控制台定向回归为 43 项通过。
+- 最新完整测试：370 passed。
 - Ruff：通过；Pyright：0 errors、0 warnings、0 informations。
-- 公开样例基线仍为 59 个单次四件套和 4 个历史公开批次；本轮没有新增、改写或回填真实模型公开样例。专项复算结果以本轮最终命令输出为准。
-- 研发视图 ESLint、TypeScript 与生产构建通过，保留既存大 chunk 提示。此前已在内置浏览器完成 YAML 上传和预检默认任务选择两项真实交互验收；本轮未把它外推为逐控件完整覆盖。
+- 公开样例现有 74 个单次四件套和 4 个历史公开批次；本轮新增 15 个独立判断完整运行，未改写既有真实模型结果。公开行为回归门禁通过。
+- 研发视图 ESLint、TypeScript 与生产构建通过，保留既存大 chunk 提示。本轮未重启服务或进行逐控件浏览器测试，不外推为完整交互覆盖。
 - 历史新契约 M3 补跑仍保持 14 个完成、11 个 `explicit_failure`、3 个 `inconclusive`、4 个 Harness 错误，未因新结果回改；当时已经丢失的错误轨迹不由新代码伪造补齐。
 - 私有历史派生报告迁移基线仍为 95/95 完整四件套复算通过；63 份只重渲染派生正文，原始三件产物与 verdict 未改。
 - 确定性本地行为门禁使用当前代码现场生成 independent current；输出写入 `runs/_quality/`，不修改跟踪报告。
-- 仓库卫生检查与 `git diff --check`：通过；真实 `.env` 与私有运行目录不由 Git 跟踪。
+- 仓库卫生检查与 `git diff --check`：通过；真实 `.env`、`reviews/` 与私有运行目录不由 Git 跟踪。
 - 被审查提交 `cd531a7fba0e9ce4dd6a440153924e29cf7d5715` 的 GitHub Actions run `46161500683` 已核实为 `completed / success`，Ubuntu 与 Windows 均成功。
 - 第四轮修复提交 `b5dd7dd9398d61071625b4b0746a2b735c05d992` 已公开推送；对应 GitHub Actions run `46165131495` 为 `completed / success`，Ubuntu 与 Windows 均成功，与本地 348 项测试及前端检查结果一致。
-- 公开 CI 所需 M0 源轨迹已进入 `runs/_sample/`，四件套可独立复算；清单仅把本机绝对目录改为相对公开目录。
+- 第五轮修复提交 `87c8a1b454a136e5bd075a975ac01036ccae374b` 已公开推送；对应 GitHub Actions run `46170613656` 已完成，Ubuntu job `141057962278` 与 Windows job `141057962535` 均为 `completed / success`，与本地 370 项测试及前端检查结果一致。
+- 公开 CI 所需源轨迹已进入 `runs/_sample/`，四件套可独立复算；清单仅把本机绝对目录改为相对公开目录。
 
 ## 五、已知限制
 

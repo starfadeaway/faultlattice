@@ -117,7 +117,7 @@ Kimi 在 LangGraph 错误观察中看到 `error_response` 后声明 `unknown`，
 - 15 个私有完整运行和 15 个公开副本分别逐个通过 `verify_report`；公开后项目共有 74 个公开单次四件套。
 - 初次公开前后私有原始 66 个文件 SHA-256 完全一致：15×4 个完整文件加 3×2 个失败审计文件。
 - 没有重新调用模型来“复算”；复算只读取既有原始产物并重建派生报告与指标。
-- 本轮完整测试为 367 passed；Pyright 为 0 errors、0 warnings。59 个既有公开单次四件套与 4 个历史批次保持可复算。
+- 试点执行阶段完整测试为 367 passed；第五轮审查修复后的最终完整测试为 370 passed，Pyright 为 0 errors、0 warnings。59 个既有公开单次四件套与 4 个历史批次保持可复算。
 
 **审查后展示修复：** 为把独立判断的 `completed` 直接标为“符合信息不足预注册（不代表业务成功）”，对 5 个符合该情形的运行重渲染了公开及私有 `report.md`。`run.json`、`steps.jsonl`、`oracle.jsonl` 的逐文件 SHA-256 在重渲染前后完全一致，声明、预期、verdict、运行 ID 和初次公开时的哈希审计记录均未改写；前后哈希与复算结果保存在本地 `.verify/independent_judgment_pilot/post_review_rerender.json`。
 
