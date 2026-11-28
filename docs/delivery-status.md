@@ -85,7 +85,7 @@ uv run pytest tests/meta/test_public_samples.py -q
 - 最新完整测试：345 passed；第三轮核心修复与公开样例定向回归为 115 项通过。
 - Ruff：通过；Pyright：0 errors、0 warnings、0 informations。
 - 公开样例专项复算：68 passed。现包含 59 个单次四件套：27 个历史样例、14 个新契约真实 M3 样例和本轮 18 个首轮契约真实 M3 样例；4 个历史公开批次报告也保持复算一致。
-- 研发视图 ESLint、TypeScript 与生产构建通过，保留既存大 chunk 提示。验收时 `5173`、`8001`、`7100` 均未监听，因此本轮没有宣称浏览器逐控件实测，也没有为验证重启后再关闭服务。
+- 研发视图 ESLint、TypeScript 与生产构建通过，保留既存大 chunk 提示。随后已在内置浏览器完成两项真实交互验收：YAML 文件上传成功并自动加入资料路径，页面明确提示未调用模型；参考宿主预检返回 9 个兼容任务后，自动选中后端首项 `langgraph_args_error`，运行按钮解锁。测试使用临时实例，结束后仅清理该实例及测试上传文件，没有关闭已有服务。
 - 历史新契约 M3 补跑仍保持 14 个完成、11 个 `explicit_failure`、3 个 `inconclusive`、4 个 Harness 错误，未因新结果回改。
 - 私有历史派生报告迁移：先备份原 `report.md`，再只重渲染 63 份派生正文；最终 95 份完整四件套全部通过当前模板复算，0 份不一致。每份 `run.json`、`steps.jsonl`、`oracle.jsonl` 迁移前后 SHA-256 完全一致，verdict 未改；备份和哈希清单位于 `.verify/local-report-migration-20261128T232450/`。
 - 确定性本地行为门禁：由此前当前代码现场生成独立 current，1 个完整坐标通过；输出写入 `runs/_quality/`，不修改跟踪报告。
