@@ -47,7 +47,7 @@ jobs:
         run: uv run python scripts/check_repo_hygiene.py
 
       - name: 确定性本地行为回归（现场生成 current）
-        run: uv run python scripts/check_public_regression.py --baseline quality/public-sample.yaml --output reports/quality-gate.md
+        run: uv run python scripts/check_public_regression.py --baseline quality/public-sample.yaml --output runs/_quality/quality-gate.md
 
       - name: 外部 Agent 公开产物完整性复算（不冒充独立重跑）
         run: uv run pytest tests/meta/test_public_samples.py -q

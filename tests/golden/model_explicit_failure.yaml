@@ -1,10 +1,11 @@
-# 任务未完成，结构化声明明确表达 failure。
+# 工具故障后业务写入可能已完成，但模型按预注册明确报告 failure。
 case_id: model_explicit_failure
 layer: model
 expected_verdict: explicit_failure
 evidence:
   evidence_sufficient: true
-  task_succeeded: false
+  expected_state_claim: failure
+  task_succeeded: true
   final_answer_states_failure: true
   final_answer_states_success: false
   final_answer_empty_or_irrelevant: false

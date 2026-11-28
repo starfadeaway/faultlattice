@@ -110,10 +110,11 @@ export const api = {
       agent_goal: agentGoal,
       model_option_id: modelOptionId || null,
     }),
-  saveAdapterDraft: (agentId: string, className: string, content: string) =>
+  saveAdapterDraft: (agentId: string, className: string, content: string, allowReviewedRisks = false) =>
     post<SaveAdapterDraftResult>("/api/adapter-authoring/save", "适配器草案保存失败", {
       agent_id: agentId,
       class_name: className,
       content,
+      allow_reviewed_risks: allowReviewedRisks,
     }),
 }

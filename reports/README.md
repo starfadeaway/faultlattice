@@ -6,9 +6,10 @@
 
 | 日期 | 报告 | 被测宿主及版本 | 一句话结论 | 链接 |
 |---|---|---|---|---|
+| 2026-11-28 | 第二轮模型互评的事实核验与修复答复 | FaultLattice 当前工作区 | 修复报告叙述、模型预期反判、安装形态 CLI、历史 replay、登记状态与草案误伤；评审中的真实外部结果与本轮独立测试分开记录。 | [第二轮答复](external/2026-11-28-peer-review-round2-response.md) |
 | 2026-11-28 | 两份模型互评的事实核验与修复答复 | FaultLattice 当前工作区 | 核心 Oracle、M3 声明协议、独立 CI、报告完整性、小样本与安全边界已修；历史结论不回改，受影响实验须按新契约重跑。 | [修复答复](external/2026-11-28-peer-review-response.md) |
 | 2026-11-27 | Anchorline 真实 Embedding 与 LanceDB 索引验收 | Anchorline 0.1.0 / BAAI-bge-m3 / LanceDB | 修复适配器配置与索引目录映射后，生产写入生成 1 条 1024 维有效向量，现场查询首位命中同一事实；仅为小样本功能验收。 | [验收报告](external/2026-11-27-anchorline-vector-index-acceptance.md) |
-| 2026-11-27 | Anchorline 工具结果呈现方式配对 A/B（旧口径） | Anchorline 0.1.0 | 两臂均真实写入并向调用方报失败；旧 Oracle 均记为 `contract_violation`，与新预注册失败信号口径不一致，旧零差值不作行为结论，须重跑。 | [配对报告](external/2026-11-27-anchorline-memory-result-surface-ab.md) |
+| 2026-11-27 | Anchorline 工具结果呈现方式同预期复现（历史 pair_id／旧口径） | Anchorline 0.1.0 | 两臂均预期并实际报失败，没有相反的 verdict 假设；历史机械配对与零差值只作等价性检查，不再把简单重跑当作有行为区分力的 A/B。 | [历史配对报告](external/2026-11-27-anchorline-memory-result-surface-ab.md) |
 | 2026-11-27 | Anchorline 与 LoreKeeper 外部 Agent M0 接入验收（旧口径） | Anchorline 0.1.0 / LoreKeeper 源码快照 | 四次均保留真实执行事实并复算一致；Anchorline 的旧 `contract_violation` 不作为新契约结论，LoreKeeper 明确记录参数故障；均为单次 M0 定性证据。 | [验收报告](external/2026-11-27-anchorline-lorekeeper-m0-acceptance.md) |
 | 2026-11-26 | MySQL、真实 Embedding 与 LanceDB 外部依赖验收 | PyMySQL 1.2.4 / BAAI-bge-m3 / LanceDB 0.41.0 | 4 个公开输入复算一致；MySQL 4 行且 ID 唯一，真实向量 2×1024 维，cosine 查询返回 4 条；仅作小样本功能验收。 | [验收报告](external/2026-11-26-external-dependency-acceptance.md) |
 | 2026-11-25 | LangGraph M3 真实模型反事实续跑验收（旧模型规则） | LangGraph 1.2.24 | 12 个运行保留真实调用与观察事实；旧模型层 verdict 不作新结构声明契约下的行为结论，Kimi 空返回项是关键词假阳性案例，全部需按新协议重跑。 | [汇总报告](external/2026-11-25-langgraph-m3-real-model-acceptance.md) |

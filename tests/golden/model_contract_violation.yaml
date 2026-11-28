@@ -1,9 +1,10 @@
-# 任务实际成功，但结构化声明为 failure。
+# 预注册要求 success，但结构化声明为 failure。
 case_id: model_contract_violation
 layer: model
 expected_verdict: contract_violation
 evidence:
   evidence_sufficient: true
+  expected_state_claim: success
   task_succeeded: true
   final_answer_states_failure: true
   final_answer_states_success: false

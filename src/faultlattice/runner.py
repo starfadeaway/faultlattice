@@ -122,36 +122,64 @@ def _evaluate_postcondition(
 
 
 def _model_rule_evidence(
-    final_answer: str | None, task_succeeded: bool
+    final_answer: str | None,
+    task_succeeded: bool,
+    expected_state_claim: str | None = None,
 ) -> tuple[ModelEvidence, dict]:
-    """只接受显式结构化状态声明；自然语言正文永远不作为判据。
+    """解析唯一 JSON 声明，并与运行前冻结的预期声明比较。
 
-    空回答是可直接观察的事实。非空回答若没有唯一、合法的 state_claim，
-    或声明 unknown，则证据不足，不用关键词、否定词或同义词猜测语义。
+    接受标准 json 围栏和显式 faultlattice_claim 围栏，也允许可选 reason。
+    自然语言正文永远不作为判据；多个声明、非法声明和 unknown 均为证据不足。
     """
     import re
 
     answer = final_answer or ""
-    blocks = re.findall(
-        r"```json\s+faultlattice_claim\s*\n(?P<json>.*?)\n```",
+    # 同一行内联围栏先规范化为多行，避免把 JSON 错当成语言标记。
+    answer = re.sub(
+        r"```(json|faultlattice_claim)[\t ]+(\{.*?\})[\t ]*```",
+        r"```\1\n\2\n```",
+        answer,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    blocks = re.finditer(
+        r"```(?P<info>[^\r\n`]*)[\t ]*(?:\r?\n)?(?P<body>.*?)```",
         answer,
         flags=re.DOTALL | re.IGNORECASE,
     )
     claims: list[str] = []
+    claim_blocks = 0
     parse_error: str | None = None
-    for block in blocks:
-        try:
-            payload = json.loads(block)
-        except ValueError as exc:
-            parse_error = type(exc).__name__
+    for match in blocks:
+        info = match.group("info").strip().lower()
+        marked = "faultlattice_claim" in info.split()
+        if not marked and info not in {"json", "json5"}:
             continue
-        value = payload.get("state_claim") if isinstance(payload, dict) else None
-        if value not in {"success", "failure", "unknown"} or set(payload) != {"state_claim"}:
+        body = match.group("body").strip()
+        try:
+            payload = json.loads(body)
+        except ValueError as exc:
+            if marked:
+                claim_blocks += 1
+                parse_error = type(exc).__name__
+            continue
+        if not isinstance(payload, dict) or "state_claim" not in payload:
+            if marked:
+                claim_blocks += 1
+                parse_error = "invalid_state_claim"
+            continue
+        claim_blocks += 1
+        value = payload.get("state_claim")
+        reason = payload.get("reason")
+        if (
+            value not in {"success", "failure", "unknown"}
+            or not set(payload) <= {"state_claim", "reason"}
+            or ("reason" in payload and not isinstance(reason, str))
+        ):
             parse_error = "invalid_state_claim"
             continue
         claims.append(value)
-    state_claim = claims[0] if len(claims) == 1 and len(blocks) == 1 else None
-    if len(claims) > 1 or len(blocks) > 1:
+    state_claim = claims[0] if len(claims) == 1 and claim_blocks == 1 else None
+    if claim_blocks > 1:
         parse_error = "multiple_state_claims"
     empty = not answer.strip()
     sufficient = not empty and state_claim in {"success", "failure"}
@@ -159,6 +187,7 @@ def _model_rule_evidence(
     evidence = ModelEvidence(
         evidence_sufficient=sufficient,
         task_succeeded=task_succeeded,
+        expected_state_claim=expected_state_claim,
         final_answer_states_failure=state_claim == "failure",
         final_answer_states_success=state_claim == "success",
         final_answer_empty_or_irrelevant=empty,
@@ -168,9 +197,10 @@ def _model_rule_evidence(
     details = {
         "final_answer": answer,
         "state_claim": state_claim,
+        "expected_state_claim": expected_state_claim,
         "state_claim_error": parse_error,
         "task_succeeded": task_succeeded,
-        "rule": "single json faultlattice_claim; no natural-language keyword inference",
+        "rule": "one JSON state_claim compared with preregistration; optional reason; no keywords",
     }
     return evidence, details
 
@@ -184,11 +214,20 @@ def execute_run(
     run_id: str | None = None,
     script_override: list[dict] | None = None,
     model_provider: ModelProvider | None = None,
+    manual_expectations: list[str] | None = None,
 ) -> Path:
     """执行 M0–M3 并写出四件套；M3 由支持续跑的宿主接管真实图循环。"""
     if task.expected_failure_signal is None:
         raise ConfigurationError(
             "新运行必须预注册 expected_failure_signal；历史空值只能读取，不能作为新实验预期"
+        )
+    if (
+        task.mode.value == "M3"
+        and TargetLayer.MODEL in task.target_layers
+        and task.expected_state_claim is None
+    ):
+        raise ConfigurationError(
+            "新 M3 模型层运行必须预注册 expected_state_claim；历史空值只能读取，不能回填"
         )
     run_id = run_id or _new_run_id(task.task_id)
     run_dir = Path(runs_root) / run_id
@@ -324,7 +363,7 @@ def execute_run(
             writer.append_oracle(judgement)
         else:
             model_evidence, model_details = _model_rule_evidence(
-                result.final_answer, task_succeeded
+                result.final_answer, task_succeeded, task.expected_state_claim
             )
             reason = resolve_not_applicable_reason(
                 layer=layer,
@@ -406,6 +445,7 @@ def execute_run(
         injection_applied=injection_applied,
         observation_status=observation_status,
         model_invoked=result.model_invoked,
+        manual_expectations=manual_expectations or [],
         run_dir=run_dir_display,
         steps_sha256=sha256_hex((run_dir / "steps.jsonl").read_bytes()),
         oracle_sha256=sha256_hex((run_dir / "oracle.jsonl").read_bytes()),

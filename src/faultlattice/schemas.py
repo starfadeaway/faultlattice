@@ -206,6 +206,9 @@ class TaskDefinition(BaseModel):
     expected_behavior: str
     # 新运行必须显式冻结；None 仅用于读取旧版历史 run.json。
     expected_failure_signal: bool | None = None
+    # 模型依据实际收到的工具观察应声明成功还是失败；与业务后置条件分开评价。
+    # 新 M3 模型层运行必须显式冻结，历史空值不得回填成当时事实。
+    expected_state_claim: Literal["success", "failure"] | None = None
     fault_recoverable: bool
     allowed_degradation: list[str] = Field(default_factory=list)
     oracle: OracleSpec
@@ -368,6 +371,8 @@ class RunManifest(BaseModel):
     injection_applied: bool
     observation_status: ObservationStatus
     model_invoked: bool = False  # 模型层是否实际被调用（M0–M2 恒为 False）
+    # 历史 replay 的人工补充预期必须显式留痕，不得冒充源运行预注册事实。
+    manual_expectations: list[str] = Field(default_factory=list)
     # 运行所在目录相对仓库根的路径，便于报告引用；不得泄露本机绝对路径。
     run_dir: str
     # 新运行写入原始轨迹哈希；None 仅表示历史产物没有可回溯校验的哈希。

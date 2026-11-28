@@ -45,7 +45,7 @@ uv run python run_all.py
 2. 在草案队列查看代码、说明与警告并填写类名，确认保存后，再在登记表中核对项目内相对 `.py` 路径和可无参实例化的类名。系统会真实加载模块，核对执行模式、注入点、工具能力和宿主版本，并记录源码 SHA-256。
 3. 从实际兼容的预注册任务中选择测试；启动后复用同一后台执行、四件套、报告复算、历史恢复和 LLM 建议流程。
 
-登记与预检会执行模块顶层代码和构造函数，因此只能接入可信源码。路径越界、能力不符或缺少 `injection.original / replacement / applied` 有效证据都会显式失败；故障任务没有真实注入证据时按 Harness 错误关闭，并保留已生成的轨迹，不计为有效故障样本。外部适配器仍需自行把宿主真实行为转换成契约事件，系统不会凭最终回答猜测内部执行过程。只有当前预检通过的宿主才陈列在“已登记宿主”。
+登记与预检会执行模块顶层代码和构造函数，因此只能接入可信源码。路径越界、能力不符或缺少 `injection.original / replacement / applied` 有效证据都会显式失败；故障任务没有真实注入证据时按 Harness 错误关闭，并保留已生成的轨迹，不计为有效故障样本。外部适配器仍需自行把宿主真实行为转换成契约事件，系统不会凭最终回答猜测内部执行过程。“已登记宿主”分别陈列待预检、预检通过与预检失败项；服务重启后登记项不会消失，可在待预检卡片上显式启动检查。只有当前预检通过的宿主才进入任务创作和实验对象选择。
 
 ### 任务创作与 AI 草案
 
@@ -53,8 +53,8 @@ uv run python run_all.py
 - 任务文件通过真实文件选择器上传 `.yaml/.yml/.json`，也可下载 YAML 模板。导入只解析到可编辑表单，不自动保存或运行；支持简化 `TaskDraft` 与当前兼容的完整 M0 `TaskDefinition`。
 - 自定义任务保存到 `tasks/custom/*.yaml`，来源标为 `custom`，并按执行模式、工具、注入点和 `preflight` 自动出现在所有兼容宿主下。当前只开放 M0 与确定性 `file_written` Oracle，`oracle.validation=unvalidated`；保存后仍需用户显式运行，删除任务不删除历史产物。
 - 五种确定性模板和“AI 生成任务草案”都只填充可编辑表单。AI 返回的 JSON 必须先通过字段、路径和宿主能力校验，再经用户显式保存才会成为预注册任务；AI 不参与 Oracle，也不会根据实验结果反向修改预期。AI 草案、保存操作和已预注册任务进入同一任务队列，右侧显示加载、完成或失败状态，详情抽屉展示工具参数、故障、文件证据、Oracle 和样本阈值。
-- “AI 适配器草案”既可直接选择上传 README、说明文档和源码，也可在高级区使用项目内路径；允许 `.md/.txt/.py/.yaml/.yml/.json/.toml` UTF-8 文件。上传原件保存到已忽略提交的 `external_agents/uploads/<uuid>/`，上传本身不调用模型。单次生成最多使用 6 个文件，单文件 10,000 字符、总计 30,000 字符进入模型；界面列出实际读取量、截断状态和按字符估算的输入 Token，估算值不是提供方账单。
-- 所有资料都放在不可信数据边界内，模型不执行其中的命令。返回 Python 只做 AST 语法、顶层适配器类和危险调用检查，辅助类不会因位置靠前而冒充适配器；信息不足必须保留 TODO。草案可下载，或显式保存到 `external_agents/drafts/<agent-id>.py`，已有文件拒绝覆盖。保存仍不等于登记，只有再次执行“真实加载并登记”才会运行模块顶层代码和构造函数。
+- “AI 适配器草案”既可直接选择上传 README、说明文档和源码，也可在高级区使用项目内路径。原件上传允许 `.md/.txt/.py/.yaml/.yml/.json/.toml` UTF-8 文件；真正发送给模型的上下文只接受 `.md/.txt/.py`，以及文件名精确为 `pyproject.toml` 或 `package.json` 的项目清单，其它配置即使已上传也不会进入模型。原件保存到已忽略提交的 `external_agents/uploads/<uuid>/`，上传本身不调用模型。单次生成最多使用 6 个文件，单文件 10,000 字符、总计 30,000 字符进入模型；界面列出实际读取量、截断状态和按字符估算的输入 Token，估算值不是提供方账单。
+- 所有资料都放在不可信数据边界内，模型不执行其中的命令。返回 Python 只做 AST 语法、顶层适配器类和危险调用检查，辅助类不会因位置靠前而冒充适配器；信息不足必须保留 TODO。`eval/exec`、进程创建等硬阻断不可绕过；普通 `agent.run()`、`getattr`、`import_module` 等只作为人工复核警告，用户明确确认风险后才可保存。草案可下载，或显式保存到 `external_agents/drafts/<agent-id>.py`，已有文件拒绝覆盖。保存仍不等于登记，只有再次执行“真实加载并登记”才会运行模块顶层代码和构造函数。
 - 本地上传与 AI 生成共用适配器队列，详情默认使用带语言标识和行号的高亮代码块，编辑代码需显式切换。失败或信息不足时可补充说明后重新生成；只有新草案成功才替换旧草案，确认保存不会自动登记。
 - 草案使用用户选定的 chat 模型，保留其思考模式，合并 `_ADVISOR_SAMPLING_PARAMS`，但不改动 M3 冻结采样。适配器与任务草案分别使用 16,000 / 8,000 的有限输出 Token 上限和 120 秒超时，不自动重试；空正文、语法错误或契约不符会明确失败，不伪造成功草案。
 
@@ -85,13 +85,13 @@ uv run faultlattice run tasks/langgraph_m3.yaml
 
 适配器使用真实 `StateGraph + ToolNode`，支持 M0–M2 的三类注入与 M3 续跑。预设模型节点只生成 `AIMessage`；真实图路由、Pydantic 参数校验、工具执行和消息状态合并由 LangGraph / LangChain 完成。观察注入会改写下一轮模型节点实际收到的 `ToolMessage.content`，而非只修改日志。
 
-两种宿主的 M3 源 run 均只读，只提供目标工具调用和故障契约。本次真实模型先生成名称、参数完全匹配的唯一调用，再执行工具与故障注入；DeepSeek 思考模式将原始 `reasoning_content` 写入真实宿主消息和结构化轨迹，并在后续工具请求中完整回传。前缀不匹配或思考字段缺失时在工具执行前终止，不自动重试、伪造或关闭思考。控制台在启动前冻结模型、思考模式和采样参数。伪模型测试只证明协议接线，真实模型结果必须另行运行。
+两种宿主的 M3 源 run 均只读，只提供目标工具调用和故障契约。本次真实模型先生成名称、参数完全匹配的唯一调用，再执行工具与故障注入；DeepSeek 思考模式将原始 `reasoning_content` 写入真实宿主消息和结构化轨迹，并在后续工具请求中完整回传。前缀不匹配或思考字段缺失时在工具执行前终止，不自动重试、伪造或关闭思考。控制台在启动前冻结模型、思考模式和采样参数。M3 任务还必须预注册 `expected_state_claim`；提示词给出完整声明模板，Oracle 将唯一结构化声明与该预期比较，不再用业务文件状态反推模型应报成功还是失败。伪模型测试只证明协议接线，真实模型结果必须另行运行。
 
 ## 当前已实现能力
 
 - 核心 schema（Pydantic v2）：FaultSpec 合法组合校验、任务预注册、轨迹事件、Oracle 判定记录、run.json 运行清单；
 - 故障模型：13 种合法组合（spec 第 3 节），非法组合直接报配置错误；
-- Oracle 判定器：框架层按预注册 `expected_failure_signal` 判定，模型层读取唯一结构化 `state_claim`；配 11 个 golden cases 与元测试；
+- Oracle 判定器：框架层按预注册 `expected_failure_signal` 判定，模型层按 `expected_state_claim` 与唯一结构化 `state_claim` 判定；配 11 个 golden cases 与元测试；
 - canonical JSON（排序键 / UTF-8 / LF / 禁 NaN）、SHA-256、原子写入，双平台测试；
 - CLI 纵向切片：`run` / `replay`（M1 纯轨迹、M2 故障注入）/ `report` / `verify`；
 - M3 反事实续跑协议、OpenAI 兼容模型适配器、双层 Oracle 与源轨迹防篡改校验；
@@ -118,9 +118,9 @@ uv run faultlattice run tasks/local_hard_timeout.yaml
 
 | 验收项 | 实际结果 |
 |---|---|
-| DeepSeek M3 | 批次 `20261125T140940-c9f18d13`：4/4 任务完成、4/4 故障观察到达，四项双层判定均为 `completed`。 |
+| DeepSeek M3（旧规则） | 批次 `20261125T140940-c9f18d13`：4/4 任务完成、4/4 故障观察到达；旧双层 `completed` 只作审计记录，需按 `expected_state_claim` 新契约重跑。 |
 | Kimi M3（旧规则） | 批次 `20261125T143001-4f916440`，模型 `kimi-k3.1-pro`，冻结采样 `{"temperature":1}`：4/4 完成、4/4 观察到达；空返回任务的旧模型 `contract_violation` 来自“未返回错误信号”的关键词误判，不是模型违约证据。旧模型层判定均需按新结构化声明协议重跑。 |
-| MiniMax M3 | 批次 `20261125T143230-c250d863`，模型 `MiniMax-M3.1-Flash`，冻结采样 `{"temperature":0.0}`：4/4 完成、4/4 观察到达，四项双层判定均为 `completed`；模型自述中的额外探针副作用也保留在原始轨迹中。 |
+| MiniMax M3（旧规则） | 批次 `20261125T143230-c250d863`，模型 `MiniMax-M3.1-Flash`，冻结采样 `{"temperature":0.0}`：4/4 完成、4/4 观察到达；旧双层 `completed` 只作审计记录，模型自述中的额外探针副作用保留在原始轨迹中，但未形成 Oracle 测量结论。 |
 | 真实修改建议 | DeepSeek、Kimi、MiniMax 均已在各自批次的 `langgraph_m3_error_continuation` 上生成并持久化建议，内容包含问题证据和回归测试；建议不参与 Oracle。 |
 | MySQL | 本机 `mysql80` 实机连接与独立 `faultlattice` 数据库索引重建成功；核对为 4 行、4 个唯一 `run_id`。 |
 | 真实 embedding | 硅基流动 `BAAI/bge-m3` 实际返回 2 个 1024 维向量，数值均有限且非零。 |
@@ -159,7 +159,7 @@ faultlattice similarity-search "工具错误返回后仍声称成功" --limit 5
 
 # 当前代码现场生成独立 current，再与版本化公开 baseline 比较。
 uv run python scripts/check_public_regression.py \
-  --baseline quality/public-sample.yaml --output reports/quality-gate.md
+  --baseline quality/public-sample.yaml --output runs/_quality/quality-gate.md
 
 # 外部 Agent 只复算公开四件套与报告完整性，不在干净 CI 冒充生产重跑。
 uv run pytest tests/meta/test_public_samples.py -q

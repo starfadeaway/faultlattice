@@ -4,6 +4,7 @@ layer: model
 expected_verdict: inconclusive
 evidence:
   evidence_sufficient: false
+  expected_state_claim: failure
   task_succeeded: false
   final_answer_states_failure: false
   final_answer_states_success: false

@@ -11,7 +11,7 @@ import {
   SaveOutlined,
   UploadOutlined,
 } from "@ant-design/icons"
-import { Alert, Button, Drawer, Empty, Input, Select, Spin, Tag, Upload } from "antd"
+import { Alert, Button, Checkbox, Drawer, Empty, Input, Select, Spin, Tag, Upload } from "antd"
 import { api } from "../../api"
 import { CodeViewer } from "../../components/CodeViewer"
 import type { AdapterDraftResult, ModelOption } from "../../types"
@@ -44,7 +44,7 @@ interface AdapterQueueItem {
 }
 
 const defaultGoal = "根据项目 README 和参考实现，为一个真实文件写入 Agent 生成 HostAdapter 草案。声明实际支持的 M0、工具与故障注入点；信息不足处保留 TODO，不编造宿主接口。"
-const acceptedDocuments = ".md,.txt,.py,.yaml,.yml,.json,.toml"
+const acceptedDocuments = ".md,.txt,.py,.toml,.json"
 
 export function AdapterDraftAssistant({ currentAgentId, models, modelOptionId, onModelChange, onUseDraft }: Props) {
   const [sourcePaths, setSourcePaths] = useState("README.md\nexamples/external_agent/reference_agent.py")
@@ -55,6 +55,7 @@ export function AdapterDraftAssistant({ currentAgentId, models, modelOptionId, o
   const [busy, setBusy] = useState("")
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
+  const [riskConfirmed, setRiskConfirmed] = useState<Record<string, boolean>>({})
   const selected = queue.find((item) => item.id === selectedId) || null
 
   function paths(): string[] {
@@ -194,7 +195,7 @@ export function AdapterDraftAssistant({ currentAgentId, models, modelOptionId, o
     setBusy(`save:${item.id}`)
     setError("")
     try {
-      const result = await api.saveAdapterDraft(item.agentId.trim(), item.className.trim(), item.content)
+      const result = await api.saveAdapterDraft(item.agentId.trim(), item.className.trim(), item.content, Boolean(riskConfirmed[item.id]))
       updateQueue(item.id, { savedPath: result.entrypoint })
       onUseDraft(item.agentId, result.entrypoint, result.class_name)
       setNotice(`${result.message} 登记与预检通过后才会进入“已登记宿主”。`)
@@ -274,6 +275,7 @@ export function AdapterDraftAssistant({ currentAgentId, models, modelOptionId, o
             <div className="draft-code-heading"><div><strong>Python 草案</strong><small>默认只读高亮代码块；需要修改时再切换编辑。</small></div><Button icon={<CodeOutlined />} onClick={() => setEditing((value) => !value)}>{editing ? "返回高亮预览" : "编辑代码"}</Button></div>
             {editing ? <Input.TextArea className="code-input adapter-draft-code" value={selected.content} onChange={(event) => updateQueue(selected.id, { content: event.target.value, savedPath: undefined })} rows={20} /> : <CodeViewer path={`${selected.agentId || "agent-adapter"}.py`} content={selected.content} />}
           </>}
+          {selected.content && !selected.savedPath && <Checkbox checked={Boolean(riskConfirmed[selected.id])} onChange={(event) => setRiskConfirmed((current) => ({ ...current, [selected.id]: event.target.checked }))}>我已人工检查动态导入、Agent.run、文件删除等调用；普通复核警告允许保存，硬阻断调用仍会被后端拒绝。</Checkbox>}
           {selected.origin === "ai" && <div className="regenerate-panel"><label><span>补充信息后重新生成</span><small>可补充真实宿主 API、事件格式、缺失能力或上一次的问题；留空则按原目标重试。旧草案只有在新草案成功后才替换。</small><Input.TextArea rows={4} value={selected.supplement} onChange={(event) => updateQueue(selected.id, { supplement: event.target.value })} placeholder="例如：实际宿主使用 async run()，工具返回必须包含 call_id；请不要继承参考循环。" /></label><Button icon={<RobotOutlined />} loading={busy === `generate:${selected.id}`} disabled={!selected.modelOptionId} onClick={() => void runGeneration(selected.id, selected.supplement)}>确认并重新生成</Button></div>}
           <div className="draft-actions"><span>{selected.savedPath ? `已保存到 ${selected.savedPath}，仍需登记预检。` : `保存目标：external_agents/drafts/${selected.agentId || "未填写接入标识"}.py；已有文件不会覆盖。`}</span><Button icon={<DownloadOutlined />} disabled={!selected.content} onClick={() => downloadText(`${selected.agentId || "agent-adapter"}.py`, selected.content, "text/x-python;charset=utf-8")}>下载 Python</Button><Button type="primary" icon={<SaveOutlined />} loading={busy === `save:${selected.id}`} disabled={!selected.content.trim() || !selected.className.trim() || !selected.agentId.trim()} onClick={() => void save(selected)}>{selected.savedPath ? "再次填入登记信息" : "确认保存草案"}</Button></div>
         </div>}

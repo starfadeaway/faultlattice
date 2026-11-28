@@ -206,15 +206,23 @@ Oracle 是把实际证据转换为判定的规则或评审来源。元数据用�
 
 `oracle.description` 必须用可读语言说明判定依据。`evidence` 保存本次实际证据，例如文件是否存在、内容是否匹配、最终信号是什么；不能只保存结论而丢掉证据。
 
-确定性规则不等于万能自然语言理解。新模型层实验只读取最终回答中唯一的 ` ```json faultlattice_claim ` 块，其 `state_claim` 取 `success` / `failure` / `unknown`。没有结构化声明、JSON 非法、多个声明或 `unknown` 均为证据不足；不得再用“错误”“成功”等自然语言关键词猜测。旧版关键词 verdict 仅保留作历史审计。
+确定性规则不等于万能自然语言理解。新模型层实验只读取最终回答中唯一的结构化声明：可使用 ` ```json faultlattice_claim ` 块、标准 ` ```json ` 块或同一行内联 JSON，对象必须包含 `state_claim=success / failure / unknown`，并可选包含字符串 `reason`。没有有效声明、JSON 非法、多个声明、额外未知字段或 `unknown` 均为证据不足；不得再用“错误”“成功”等自然语言关键词猜测。旧版关键词 verdict 仅保留作历史审计。
 
 ### `expected_failure_signal`
 
 布尔值，运行前随任务预注册冻结，表示在当前故障和业务后置条件下，框架是否应向调用方返回明确失败信号。它把 `expected_behavior` 中的信号要求变成机器判据：要求失败且实际报失败是 `explicit_failure`，要求失败却正常完成是 `silent_failure`，要求正常完成却报失败是 `contract_violation`。工具已产生真实副作用并不自动意味着框架报失败就是违约。旧 run.json 没有该字段时按历史口径展示，不回填为预先存在。
 
+### `expected_state_claim`
+
+M3 模型层任务在运行前冻结的预期声明，只允许 `success` 或 `failure`。它描述模型收到当前故障观察后应如何报告执行结果，不等同于业务后置条件。预注册为 `failure` 时，即使文件已真实写入，模型如实声明 `failure` 仍判 `explicit_failure`；隐瞒故障声明 `success` 判 `contract_violation`。新 M3 模型层运行缺少该字段时在宿主执行前拒绝，历史空值不得事后补写成源运行事实。
+
 ### `state_claim`
 
 模型在最终回答末尾给出的机器可读声明，只允许 `success`、`failure`、`unknown`。它是模型自述，不替代文件系统或业务状态后置观察；声明成功但独立状态不支持时仍是 `silent_failure`。
+
+### `manual_expectations`
+
+新 replay 运行清单中的字符串列表，记录哪些预期不是源运行的预注册事实，而是用户在重放前显式补充。历史 run 缺少 `expected_failure_signal` 时，CLI 可传 `--expected-failure-signal` 或 `--no-expected-failure-signal`；新清单写入 `manual_expectations=["expected_failure_signal"]` 并在报告中标注“人工补充预期”。源运行已有该字段时禁止覆盖；未显式传值时仍拒绝，不做静默默认。
 
 ## 6. 产物文件（每次运行的四件套）
 
@@ -292,7 +300,7 @@ A/B 对照用于比较“同一种故障以不同呈现方式出现”时的差�
 - 除 `surface_as` 外出现任何条件差异，都应在执行前按配置错误拒绝。
 - 配对任务共用同一个 `task_id`，两个预注册文件分别命名为 `tasks/custom/<task_id>-return.yaml` 与 `tasks/custom/<task_id>-raise.yaml`，并共用同一 `pair_id`。这是普通自定义任务 `<task_id>.yaml` 单文件规则的显式例外；不得以不同 `task_id` 逃避配对硬校验。
 
-本次已执行配对的登记名为 `task_id=anchorline-memory-result-ab`、`pair_id=anchorline-memory-result-surface-v1`；两个文件分别为 `anchorline-memory-result-ab-return.yaml` 与 `anchorline-memory-result-ab-raise.yaml`。后续新增配对仍须先登记并冻结，不得根据既有结果补写配对关系。
+历史已执行配对的登记名为 `task_id=anchorline-memory-result-ab`、`pair_id=anchorline-memory-result-surface-v1`；两个文件分别为 `anchorline-memory-result-ab-return.yaml` 与 `anchorline-memory-result-ab-raise.yaml`。两臂都预注册 `expected_failure_signal=true`，没有“一个呈现方式应正常完成、另一个应报失败”的差异假设，因此保留历史 pair_id 只用于机械配对与同预期复现，不能把简单重跑或零差值宣称为有行为区分力的 A/B 结论。后续新增配对须先登记可检验的行为假设并冻结，不得根据既有结果补写配对关系。
 
 示例坐标：
 
@@ -387,6 +395,7 @@ LLM 修改建议接口为 `POST /api/experiments/history/{batch_id}/tasks/{task_
 - 外部运行复用既有四件套、报告复算、套件历史、事件展示与 LLM 建议。启动前冻结任务副本和 M3 模型配置，不改写原任务 YAML。
 - 外部故障任务必须提供 `injection.original / replacement / applied` 证据且 `run.json.injection_applied=true`。证据缺失时按 Harness 错误失败关闭，保留已生成的 `run_id`、事件和判定，不计为有效故障样本。
 - 登记与预检会真实执行模块顶层代码和构造函数，只允许用户明确信任的本地源码。当前入口不是任意 HTTP Agent、黑盒可执行文件或普通模型 API 的自动适配器。
+- 宿主状态为 `registered / ready / error`：`registered` 表示登记仍在但当前进程没有预检缓存，页面必须展示该卡片并提供“开始预检”；`ready` 才进入任务创作和实验对象选择；`error` 局部显示失败原因。GET 列表保持只读，不用刷新列表冒充预检。
 
 ## 13. smolagents 宿主适配
 
@@ -595,10 +604,11 @@ task_id × host × mode × experiment_family
 
 - `AIAuthoringService` 负责真实 LLM 草案请求。AI 只返回可编辑草案，不自动登记、不自动运行、不参与 Oracle，也不得根据实验结果反向修改预注册预期。
 - `POST /api/adapter-authoring/upload` 把明确选择的 `.md / .txt / .py / .yaml / .yml / .json / .toml` UTF-8 资料原件保存到 `external_agents/uploads/<uuid>/<filename>`，该目录由 Git 忽略。上传不调用模型；危险文件名、不支持扩展名和空文件必须拒绝。
-- 适配器资料既可从上传目录选择，也可通过高级区的项目内相对路径读取。一次最多 6 个文件，单文件最多 10,000 字符、总计最多 30,000 字符进入模型；拒绝绝对路径、`..` 越界、不支持扩展名和非 UTF-8 内容。
+- 适配器资料既可从上传目录选择，也可通过高级区的项目内相对路径读取。一次最多 6 个文件，单文件最多 10,000 字符、总计最多 30,000 字符进入模型；模型上下文只接受 `.md / .txt / .py` 及文件名精确为 `pyproject.toml` / `package.json` 的项目清单。拒绝绝对路径、`..` 越界、不支持扩展名和非 UTF-8 内容；目录边界按工作区相对路径的 parts 判断。
 - 资料以 `untrusted_agent_document` 包装并明确标记为不可信数据；其中包含的命令、角色设定或泄密要求均不得执行。返回的 `estimated_input_tokens` 按字符数估算，仅用于预算提示，不是提供方账单。
 - 草案先做本地 Python AST 与任务契约校验，不导入或执行代码。适配器类按名称、宿主基类、`run_script`、`preflight` 和 `capabilities` 识别，辅助 dataclass 或异常类不会仅因位置靠前而冒充适配器。语法错误、任务字段错误或宿主能力不匹配均拒绝交付为可保存草案。
-- 适配器草案最长 60,000 字符；只有用户显式保存后才写入 `external_agents/drafts/<agent-id>.py`，已有文件拒绝覆盖。保存不等于登记，之后仍须独立执行真实模块加载与 `preflight`，再由用户明确登记或运行；只有预检通过的宿主才进入“已登记宿主”陈列。
+- AST 检查把 `eval/exec/compile/__import__`、进程创建和递归删除列为不可绕过的 `blockers`；普通 `.run()`、`getattr`、`import_module`、`remove`、`unlink` 只列入人工复核警告。`allow_reviewed_risks=true` 表示用户明确确认警告，不得绕过硬阻断。
+- 适配器草案最长 60,000 字符；只有用户显式保存后才写入 `external_agents/drafts/<agent-id>.py`，已有文件拒绝覆盖。保存不等于登记，之后仍须独立执行真实模块加载与 `preflight`，再由用户明确登记或运行；“已登记宿主”陈列待预检、预检通过与失败三态，只有预检通过的宿主才进入任务创作与实验对象选择。
 - 适配器队列统一陈列本地上传与 AI 生成草案。详情默认使用 `CodeViewer` 展示说明、资料读取、警告和 Python 代码，编辑需显式切换；用户可补充信息后重新生成，只有新草案成功才替换旧草案，重新生成与确认保存均为独立操作。
 - 草案采样按默认 `temperature=0.1` → `_SAMPLING_PARAMS` → `_ADVISOR_SAMPLING_PARAMS` → 草案专用 `max_tokens` 合并，保留用户配置的思考模式，不静默降级。适配器与任务草案输出上限分别为 16,000 / 8,000 Token，单次超时 120 秒，不自动重试；这些配置不进入 M3 冻结采样。
 - 任务表单提供“正常写入、参数边界、错误返回、空结果、异常传播”五种模板、YAML 模板下载、文件上传和 AI 一键填写；适配器表单提供模板、文件上传与 AI 草案。所有快捷方式只填充可编辑内容，最终保存、登记与运行始终是独立人工操作。

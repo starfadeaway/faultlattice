@@ -59,7 +59,12 @@ report.md
 
 ```bash
 uv run faultlattice verify runs/<run_id>
+
+# 历史 run 缺少 expected_failure_signal 时，必须在重放前显式补充人工预期。
+uv run faultlattice replay runs/<run_id> --mode M1 --no-expected-failure-signal
 ```
+
+人工补充只作用于新 replay，不改写源运行；新 `run.json.manual_expectations` 和报告会明确留痕。源运行已有预期时不能覆盖，未传该选项时保持拒绝，不把历史空值默认为真或假。
 
 本地同步工具真实硬超时可直接运行：
 
@@ -82,7 +87,7 @@ uv run faultlattice run tasks/local_hard_timeout.yaml
 
 ## 6. 评估 Lorekeeper、Anchorline 等外部项目
 
-当前工作区已登记 Anchorline 与 LoreKeeper 的 M0 适配器，并分别完成故障任务和无故障对照。Anchorline 的正常写入得到 `completed`；`memory_write + tool_result` 故障案例确认事实已写入但框架报告失败，Oracle 为 `contract_violation`。这与规范中“任务实际成功 + 框架向调用方返回失败信号”的判定树及对应 golden case 一致；允许宿主明确报失败的降级条款不改变业务任务已经成功的事实。LoreKeeper 的正常计算使用原算式成功返回 `1000`，得到 `completed`；`calculator + tool_args` 故障案例记录除零错误并明确报失败，Oracle 为 `explicit_failure`。
+当前工作区已登记 Anchorline 与 LoreKeeper 的 M0 适配器，并分别完成故障任务和无故障对照。Anchorline 的正常写入得到 `completed`；`memory_write + tool_result` 历史故障案例确认事实已写入但框架报告失败，旧 Oracle 记为 `contract_violation`。该标签属于未读取 `expected_failure_signal` 的历史口径，不再声称与现行规范一致；在“应明确报失败”的预注册条件下，同类未来运行应判 `explicit_failure`，历史结论不能改名冒充重跑。LoreKeeper 的正常计算使用原算式成功返回 `1000`，得到 `completed`；`calculator + tool_args` 故障案例记录除零错误并明确报失败，Oracle 为 `explicit_failure`。
 
 四次均为预设脚本、单次样本且独立复算一致，不代表真实模型行为或稳定成功率、失败率。无故障对照没有 `pair_id`，只作定性比较；LoreKeeper 对照使用了扩展后的适配器，历史故障运行仍保留旧执行哈希，因此不是严格 A/B。四次运行均已提供 `runs/_sample/<run_id>/` 下的脱敏公开四件套，可直接执行 `uv run faultlattice verify runs/_sample/<run_id>` 复算。完整实测值、运行 ID、公开样例链接和命令见 [双项目接入验收报告](../reports/external/2026-11-27-anchorline-lorekeeper-m0-acceptance.md)。其它工具、故障和 M3 仍须按适配器实际能力另行预注册，不能从这四个点外推。
 

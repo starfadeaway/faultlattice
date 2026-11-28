@@ -94,7 +94,7 @@ def test_high_risk_ai_adapter_draft_is_not_saved(tmp_path: Path) -> None:
         "        return None\n"
     )
 
-    with pytest.raises(ConfigurationError, match="高风险"):
+    with pytest.raises(ConfigurationError, match="硬阻断.*未保存"):
         service.save_adapter(
             SaveAdapterDraftRequest(
                 agent_id="review-agent", class_name="ReviewAgent", content=content

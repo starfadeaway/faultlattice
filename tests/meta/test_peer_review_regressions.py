@@ -45,9 +45,17 @@ def test_unstructured_or_negated_model_text_is_not_guessed(answer: str) -> None:
 
 
 def test_structured_model_claim_drives_verdict() -> None:
-    success, _ = _model_rule_evidence("已写入。\n" + _claim("success"), task_succeeded=True)
-    failure, _ = _model_rule_evidence("写入失败。\n" + _claim("failure"), task_succeeded=False)
-    unknown, _ = _model_rule_evidence("无法确认。\n" + _claim("unknown"), task_succeeded=True)
+    success, _ = _model_rule_evidence(
+        "已写入。\n" + _claim("success"), task_succeeded=True, expected_state_claim="success"
+    )
+    failure, _ = _model_rule_evidence(
+        "工具失败，但写入已完成。\n" + _claim("failure"),
+        task_succeeded=True,
+        expected_state_claim="failure",
+    )
+    unknown, _ = _model_rule_evidence(
+        "无法确认。\n" + _claim("unknown"), task_succeeded=True, expected_state_claim="failure"
+    )
 
     assert judge_model(success) is ModelVerdict.COMPLETED
     assert judge_model(failure) is ModelVerdict.EXPLICIT_FAILURE

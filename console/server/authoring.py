@@ -79,6 +79,7 @@ class SaveAdapterDraftRequest(BaseModel):
     agent_id: str
     class_name: str = Field(min_length=1, max_length=120)
     content: str = Field(min_length=1, max_length=_MAX_DRAFT_CHARACTERS)
+    allow_reviewed_risks: bool = False
 
 
 class TextFileUploadRequest(BaseModel):
@@ -202,24 +203,37 @@ def inspect_adapter_source(content: str, expected_class: str | None = None) -> d
     for required in ("run_script", "preflight"):
         if required not in methods:
             warnings.append(f"当前类未直接实现 {required}；若依赖继承，登记预检仍会核对真实协议")
-    dangerous = {
-        "eval", "exec", "compile", "__import__", "system", "popen", "Popen",
-        "run", "rmtree", "import_module", "getattr", "remove", "unlink",
+    hard_dangerous = {
+        "eval", "exec", "compile", "__import__", "system", "popen", "Popen", "rmtree",
     }
-    hits = sorted(
-        {
-            node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, (ast.Name, ast.Attribute))
-            and (node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id) in dangerous
-        }
-    )
+    review_dangerous = {"run", "import_module", "getattr", "remove", "unlink"}
+    blockers: set[str] = set()
+    hits: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, (ast.Name, ast.Attribute)):
+            continue
+        name = node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "subprocess"
+            and name == "run"
+        ):
+            name = "subprocess.run"
+        if name in hard_dangerous | {"subprocess.run"}:
+            blockers.add(name)
+            hits.add(name)
+        elif name in review_dangerous:
+            hits.add(name)
     if hits:
-        warnings.append("发现需人工复核的高风险动态执行、进程或文件调用：" + "、".join(hits))
+        warnings.append("发现需人工复核的高风险动态执行、进程或文件调用：" + "、".join(sorted(hits)))
     if not selected.bases:
         warnings.append("适配器类没有基类；必须自行完整实现 HostAdapter 协议")
-    return {"class_name": selected.name, "warnings": warnings}
+    return {
+        "class_name": selected.name,
+        "warnings": warnings,
+        "blockers": sorted(blockers),
+    }
 
 
 class TaskAuthoringService:
@@ -627,7 +641,10 @@ class AIAuthoringService:
             lowered_name = path.name.lower()
             if any(marker in lowered_name for marker in _SENSITIVE_NAME_MARKERS):
                 raise ConfigurationError(f"疑似凭据或敏感配置不得发送给模型: {relative}")
-            if any(part in {".git", ".venv", "node_modules", "runs", ".verify"} for part in path.parts):
+            if any(
+                part in {".git", ".venv", "node_modules", "runs", ".verify"}
+                for part in Path(relative).parts
+            ):
                 raise ConfigurationError(f"依赖、运行产物或校验临时区不得作为 AI 资料: {relative}")
             if (
                 path.suffix.lower() not in _AI_SOURCE_SUFFIXES
@@ -707,8 +724,18 @@ class AIAuthoringService:
         if not _AGENT_ID.fullmatch(request.agent_id):
             raise ConfigurationError("接入标识需为 2–50 位小写字母、数字或连字符，并以字母开头")
         inspection = inspect_adapter_source(request.content, request.class_name)
-        if any("高风险" in warning for warning in inspection["warnings"]):
-            raise ConfigurationError("草案包含高风险调用，未保存；请移除后重新生成或人工改写")
+        if inspection["blockers"]:
+            raise ConfigurationError(
+                "草案包含硬阻断的动态执行、进程或递归删除调用，未保存："
+                + "、".join(inspection["blockers"])
+            )
+        if (
+            any("高风险" in warning for warning in inspection["warnings"])
+            and not request.allow_reviewed_risks
+        ):
+            raise ConfigurationError(
+                "草案含需人工复核的调用；请检查代码并显式勾选风险确认后再保存"
+            )
         path = self.root / "external_agents" / "drafts" / f"{request.agent_id}.py"
         if path.exists():
             raise ConfigurationError("草案文件已存在；为避免覆盖人工修改，请更换接入标识")

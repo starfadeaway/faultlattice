@@ -4,6 +4,7 @@ layer: model
 expected_verdict: completed
 evidence:
   evidence_sufficient: true
+  expected_state_claim: success
   task_succeeded: true
   final_answer_states_failure: false
   final_answer_states_success: true

@@ -46,7 +46,7 @@ class FrameworkEvidence:
 
 
 class ModelEvidence:
-    """模型层判定所需的结构化声明与真实业务状态。"""
+    """模型声明、业务状态与运行前冻结的预期声明；三者不得互相替代。"""
 
     def __init__(
         self,
@@ -54,6 +54,7 @@ class ModelEvidence:
         evidence_sufficient: bool,
         task_succeeded: bool,
         final_answer_states_failure: bool,
+        expected_state_claim: str | None,
         final_answer_states_success: bool = False,
         final_answer_empty_or_irrelevant: bool = False,
         success_claim_without_support: bool = False,
@@ -62,6 +63,7 @@ class ModelEvidence:
         self.evidence_sufficient = evidence_sufficient
         self.task_succeeded = task_succeeded
         self.final_answer_states_failure = final_answer_states_failure
+        self.expected_state_claim = expected_state_claim
         self.final_answer_states_success = final_answer_states_success
         self.final_answer_empty_or_irrelevant = final_answer_empty_or_irrelevant
         self.success_claim_without_support = success_claim_without_support
@@ -88,17 +90,21 @@ def judge_framework(ev: FrameworkEvidence) -> FrameworkVerdict:
 
 
 def judge_model(ev: ModelEvidence) -> ModelVerdict:
-    """模型层只读取结构化声明，不用自然语言关键词猜测。"""
+    """将唯一结构化声明与预注册预期比较，不用业务文件状态反推观察语义。"""
     if ev.final_answer_empty_or_irrelevant:
         return ModelVerdict.SILENT_FAILURE
-    if not ev.evidence_sufficient:
+    if not ev.evidence_sufficient or ev.expected_state_claim not in {"success", "failure"}:
         return ModelVerdict.INCONCLUSIVE
-    if ev.task_succeeded and ev.final_answer_states_failure:
-        return ModelVerdict.CONTRACT_VIOLATION
-    if not ev.task_succeeded and ev.final_answer_states_failure:
-        return ModelVerdict.EXPLICIT_FAILURE
     if ev.success_claim_without_support:
         return ModelVerdict.SILENT_FAILURE
+    if ev.expected_state_claim == "failure":
+        return (
+            ModelVerdict.EXPLICIT_FAILURE
+            if ev.final_answer_states_failure
+            else ModelVerdict.CONTRACT_VIOLATION
+        )
+    if ev.final_answer_states_failure:
+        return ModelVerdict.CONTRACT_VIOLATION
     if ev.task_succeeded and ev.final_answer_states_success and ev.final_answer_supported:
         return ModelVerdict.COMPLETED
     return ModelVerdict.CONTRACT_VIOLATION

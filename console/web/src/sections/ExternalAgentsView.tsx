@@ -119,6 +119,7 @@ export function ExternalAgentsView() {
   const initialLoad = useRef(false)
   const navigate = useNavigate()
   const selectedPreset = adapterPresets.find((preset) => preset.id === presetId) || adapterPresets[0]
+  const registeredAgents = agents.filter((agent) => agent.status === "registered")
   const readyAgents = agents.filter((agent) => agent.status === "ready")
   const failedAgents = agents.filter((agent) => agent.status === "error")
 
@@ -239,7 +240,7 @@ export function ExternalAgentsView() {
     }
   }
 
-  if (loading) return <div className="initial-loading"><Spin size="large" description="正在加载并预检外部 Agent 适配器" /></div>
+  if (loading) return <div className="initial-loading"><Spin size="large" description="正在只读加载外部 Agent 登记信息" /></div>
 
   return (
     <div className="view-stack external-agents-view">
@@ -250,14 +251,14 @@ export function ExternalAgentsView() {
           <h2>接入你的 Agent，复用同一条可复算测试链</h2>
           <p>这里接入的是实现 HostAdapter 的 Agent 宿主，不是模型 API。登记后真实加载代码、核对能力与工具契约，再运行兼容的预注册任务。</p>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void load()}>重新加载与预检</Button>
+        <Button icon={<ReloadOutlined />} onClick={() => void load()}>重新读取登记</Button>
       </section>
 
       <div className="monitor-tabs integration-tabs" role="tablist" aria-label="接入页面子视图">
         <div className="monitor-tabs-scroll">
           <button id="integration-register-tab" type="button" role="tab" aria-selected={activeSection === "register"} aria-controls="integration-register-panel" className={activeSection === "register" ? "monitor-tab active" : "monitor-tab"} onClick={() => setActiveSection("register")}><ApiOutlined />登记本地适配器</button>
           <button id="integration-tasks-tab" type="button" role="tab" aria-selected={activeSection === "tasks"} aria-controls="integration-tasks-panel" className={activeSection === "tasks" ? "monitor-tab active" : "monitor-tab"} onClick={() => setActiveSection("tasks")}><FileAddOutlined />任务创作</button>
-          <button id="integration-hosts-tab" type="button" role="tab" aria-selected={activeSection === "hosts"} aria-controls="integration-hosts-panel" className={activeSection === "hosts" ? "monitor-tab active" : "monitor-tab"} onClick={() => setActiveSection("hosts")}><DeploymentUnitOutlined />已登记宿主（{readyAgents.length}）</button>
+          <button id="integration-hosts-tab" type="button" role="tab" aria-selected={activeSection === "hosts"} aria-controls="integration-hosts-panel" className={activeSection === "hosts" ? "monitor-tab active" : "monitor-tab"} onClick={() => setActiveSection("hosts")}><DeploymentUnitOutlined />已登记宿主（{agents.length}）</button>
         </div>
       </div>
 
@@ -317,12 +318,13 @@ export function ExternalAgentsView() {
         <section className="external-registry">
           <div className="section-heading">
             <div><span className="section-kicker">REGISTERED HOSTS</span><h2>已登记宿主</h2></div>
-            <span>{readyAgents.length} 个适配器 · 只陈列当前预检通过的宿主</span>
+            <span>{agents.length} 个登记项 · {readyAgents.length} 个可运行 · {registeredAgents.length} 个待预检</span>
           </div>
           {failedAgents.length > 0 && <Alert type="warning" showIcon title={`${failedAgents.length} 个已登记项当前未通过预检，未纳入可运行列表`} description={failedAgents.map((agent) => `${agent.id}：${agent.error || "预检失败"}`).join("；")} />}
-          {!readyAgents.length ? <Empty description="尚无预检通过的宿主；请先上传适配器并完成真实登记预检" /> : (
+          {registeredAgents.length > 0 && <Alert type="info" showIcon title="服务重启后，登记仍保留，但需要显式预检" description="待预检卡片不会执行任何代码；只有点击对应卡片的“开始预检”才会加载该适配器。" />}
+          {registeredAgents.length + readyAgents.length === 0 ? <Empty description="尚无可用登记项；请先上传适配器并完成真实登记预检" /> : (
             <div className="external-agent-grid">
-              {readyAgents.map((agent) => {
+              {[...registeredAgents, ...readyAgents].map((agent) => {
                 const selectedPath = selectedTasks[agent.id] || ""
                 const selectedTask = agent.compatible_tasks.find((task) => task.path === selectedPath) || null
                 return (
@@ -330,10 +332,10 @@ export function ExternalAgentsView() {
                     <div className="external-agent-heading">
                       <span className="suite-icon"><DeploymentUnitOutlined /></span>
                       <div><strong>{agent.name}</strong><code>{agent.id} · {agent.class_name}</code></div>
-                      <Tag color={agent.status === "ready" ? "success" : "error"}>{agent.status === "ready" ? "预检通过" : "预检失败"}</Tag>
+                      <Tag color={agent.status === "ready" ? "success" : "processing"}>{agent.status === "ready" ? "预检通过" : "已登记 · 待预检"}</Tag>
                     </div>
                     <code className="adapter-entrypoint">{agent.entrypoint}</code>
-                    {agent.error && <Alert type="error" showIcon title={agent.error} />}
+                    {agent.error && <Alert type="warning" showIcon title={agent.error} />}
                     {agent.capabilities && (
                       <div className="capability-tags">
                         <Tag color="blue">{agent.host_name} · v{agent.host_package_version || "未声明"}</Tag>
@@ -343,7 +345,7 @@ export function ExternalAgentsView() {
                       </div>
                     )}
                     {agent.source_sha256 && <small className="source-hash">源码 SHA-256：<code>{agent.source_sha256}</code></small>}
-                    <div className="external-task-picker">
+                    {agent.status === "registered" ? <Alert type="info" showIcon title="尚未加载适配器" description="预检通过后会在这里显示能力、兼容任务和运行入口。" /> : <div className="external-task-picker">
                       <label>
                         <span>兼容的预注册任务（{agent.compatible_tasks.length}）</span>
                         <Select
@@ -376,11 +378,11 @@ export function ExternalAgentsView() {
                           )}
                         </div>
                       )}
-                    </div>
+                    </div>}
                     <div className="external-agent-actions">
                       {presetAgentIds.has(agent.id) && <Button icon={<CodeOutlined />} onClick={() => void openSource(agent)}>查看适配器代码</Button>}
-                      <Tooltip title="重新读取当前源码并核对版本、能力和兼容任务">
-                        <Button icon={<ReloadOutlined />} loading={busy === `preflight:${agent.id}`} onClick={() => void preflight(agent.id)}>重新预检</Button>
+                      <Tooltip title="只读取当前适配器源码并核对版本、能力和兼容任务">
+                        <Button type={agent.status === "registered" ? "primary" : "default"} icon={<ReloadOutlined />} loading={busy === `preflight:${agent.id}`} onClick={() => void preflight(agent.id)}>{agent.status === "registered" ? "开始预检" : "重新预检"}</Button>
                       </Tooltip>
                       <Button
                         type="primary"
@@ -392,7 +394,7 @@ export function ExternalAgentsView() {
                         运行并查看全过程
                       </Button>
                     </div>
-                    <small className="external-run-note"><CheckCircleOutlined /> 启动后进入实验页查看事件与判定；结束后可生成 LLM 修改建议并下载 Markdown。</small>
+                    <small className="external-run-note"><CheckCircleOutlined /> {agent.status === "ready" ? "启动后进入实验页查看事件与判定；结束后可生成建议并下载 Markdown。" : "先完成此卡片预检，再选择兼容任务运行。"}</small>
                   </article>
                 )
               })}

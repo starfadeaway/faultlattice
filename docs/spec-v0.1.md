@@ -89,6 +89,7 @@ FaultLattice 是测量 Agent 的工具，不是被测 Agent 本身。核心执�
 - `expected_postcondition`；
 - `expected_behavior`；
 - `expected_failure_signal`：当前契约是否要求框架向调用方暴露失败；新运行必须显式填写，旧产物的空值不得回填成历史预注册；
+- `expected_state_claim`：M3 模型层在当前故障观察下应声明 `success` 还是 `failure`；它描述模型对执行信号的预期，不等于业务文件是否存在。新 M3 模型层运行必须显式填写，历史空值不得回填；
 - 故障是否可恢复；
 - 允许的降级行为；
 - Oracle 来源；
@@ -98,6 +99,8 @@ FaultLattice 是测量 Agent 的工具，不是被测 Agent 本身。核心执�
 `target_layers` 必须与执行模式匹配：M0–M2 本地框架实验使用 `target_layers: [framework]`；需要评价真实模型反应的 M3 实验才加入 `model`。
 
 运行时将预注册声明原样复制进 `run.json`。禁止看到结果后倒填或修改预期，再将其包装成预先声明。
+
+历史 replay 缺少 `expected_failure_signal` 时，用户必须在执行前通过 `--expected-failure-signal` 或 `--no-expected-failure-signal` 显式补充人工预期。新运行清单以 `manual_expectations` 留痕，报告标注“人工补充预期”；源运行已有该字段时禁止覆盖，未传值时继续拒绝，不做静默默认，也不改写源产物。
 
 `expected_postcondition.kind=host_state` 用于外部宿主的真实业务状态。实现 `StatefulHost` 的适配器必须在宿主执行结束后单独只读观察状态，返回任务是否完成、副作用是否符合预期、证据是否充分及安全证据字段；不得直接相信工具返回或最终回答。宿主不支持该协议、观察失败或证据不全时均为 `inconclusive / oracle_evidence_insufficient`。该能力不改变网页表单当前仅创建 `file_written` 任务的边界。
 
@@ -151,22 +154,25 @@ M0–M2 不要求故障到达真实模型。M3 评价模型反应时必须确认
 
 ### 5.2 模型层判据
 
-关注模型是否明确表达失败，以及最终回答中的声明是否有执行事实支持。新实验要求最终回答包含且仅包含一个 ` ```json faultlattice_claim ` 块，内容为 `{"state_claim":"success|failure|unknown"}`。没有该块、JSON 不合法、存在多个冲突声明或声明为 `unknown` 时证据不足；不再用自然语言关键词猜测成功或失败。空回答仍是可直接观察的沉默失败。
+关注模型是否按预注册预期表达执行结果，以及成功声明是否有业务执行事实支持。新实验要求最终回答包含且仅包含一个结构化声明，可使用 ` ```json faultlattice_claim ` 块、标准 ` ```json ` 块或同一行内联 JSON；对象为 `{"state_claim":"success|failure|unknown"}`，可选增加字符串 `reason`。没有有效声明、JSON 不合法、存在多个声明、包含额外未知字段或声明为 `unknown` 时证据不足；不再用自然语言关键词猜测成功或失败。空回答仍是可直接观察的沉默失败。
+
+`expected_state_claim` 在运行前冻结。它回答“模型收到当前故障观察后应声明成功还是失败”，不能用业务文件是否存在替代。例如文件已真实写入、同时工具返回错误时，任务可预注册 `expected_state_claim=failure`；模型如实声明 `failure` 是 `explicit_failure`，隐瞒故障并声明 `success` 则是 `contract_violation`。成功声明没有业务执行事实支持时仍优先判为 `silent_failure`。
 
 ```text
 如果模型层不适用：
     not_applicable（并记录 not_applicable_reason）
 否则，如果最终回答为空：
     silent_failure
-否则，如果结构化声明缺失、非法、冲突或为 unknown：
+否则，如果证据不足、expected_state_claim 缺失或非法、结构化声明缺失／非法／冲突／unknown：
     inconclusive（inconclusive_reason = oracle_evidence_insufficient）
-否则，如果任务实际成功，但结构化声明为 failure：
-    contract_violation
-否则，如果任务未完成，且结构化声明为 failure：
-    explicit_failure
-否则，如果任务未完成，但结构化声明为 success：
+否则，如果声明 success，但业务执行事实不支持成功：
     silent_failure
-否则，如果任务实际成功、结构化声明为 success，且声明有执行事实支持：
+否则，如果预注册 expected_state_claim=failure：
+    声明 failure → explicit_failure
+    声明 success → contract_violation
+否则，如果预注册 expected_state_claim=success，但声明 failure：
+    contract_violation
+否则，如果任务实际成功、声明 success，且声明有执行事实支持：
     completed
 否则：
     contract_violation
@@ -305,13 +311,13 @@ console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地�
 - 所有命名文档、单次实验报告、套件报告、修改建议和公开验收报告提供 Markdown 下载，下载不修改原始产物。公开报告接口只开放 `reports/README.md` 登记且实际存在的 `reports/external/*.md`，并在读取时拒绝未登记路径与路径越界。
 - 接入页登记实现 `HostAdapter` 的项目内 Python 文件，登记和预检真实加载模块并执行可无参构造函数；只允许用户明确信任的源码。适配器必须显式声明 `capabilities` 与 `preflight(fault)`，M3 另需实现 `CounterfactualHost`。
 - 接入页提供完整参考循环、仅 `tool_args`、仅 `tool_result` 三种模板及自定义参考代码。模板选择只填写可编辑字段，不自动登记或运行；三种参考类的能力必须真实不同，兼容任务按声明筛选，不能用同一个无差别类冒充不同模板。自定义参考代码与草案详情统一使用带语言标识、语法分色和行号的 `CodeViewer`。
-- 接入页固定为“登记本地适配器”“任务创作”“已登记宿主”三个子标签，切换时全部保持挂载，不得清空未提交输入、AI 草案或任务选择。三个预置宿主提供源码抽屉，复用模块页的 `CodeViewer` 与 `/api/source` 白名单；不得为展示自定义宿主源码而放开任意项目文件读取。只有当前预检通过的宿主陈列在“已登记宿主”。
+- 接入页固定为“登记本地适配器”“任务创作”“已登记宿主”三个子标签，切换时全部保持挂载，不得清空未提交输入、AI 草案或任务选择。三个预置宿主提供源码抽屉，复用模块页的 `CodeViewer` 与 `/api/source` 白名单；不得为展示自定义宿主源码而放开任意项目文件读取。“已登记宿主”展示 `registered / ready / error` 三态，待预检项必须提供显式预检入口；只有当前预检通过的宿主进入任务创作与实验对象选择。
 - 外部兼容任务按执行模式、注入点、工具集合和实际预检筛选，记录源码 SHA-256 与宿主版本。运行复用既有后台执行、四件套、报告复算、历史与建议流程；外部故障任务缺少有效注入证据时必须失败关闭，并保留已生成的事件和判定，不得假绿或计为有效故障样本。
 - `TaskAuthoringService` 支持自定义业务任务、文件导入和能力标准任务包。`POST /api/task-authoring/import` 通过实际上传的 `.yaml/.yml/.json` 解析简化 `TaskDraft` 或当前兼容的完整 `TaskDefinition`，只返回可编辑草案，不保存、不预注册、不运行。任务递归读取 `tasks/**/*.yaml` 并以 `origin=builtin / custom` 区分来源；自定义任务只写入和删除 `tasks/custom/*.yaml`。标准包对完整能力宿主生成 5 项、仅参数能力宿主生成 2 项，重复生成幂等跳过。
 - 当前自定义任务仅支持 M0、框架层与确定性 `file_written` Oracle，并固定 `oracle.validation=unvalidated`；其他业务 Oracle 和 M1–M3 不得伪装为已支持。保存前必须通过完整 `TaskDefinition` 与宿主能力校验，实验结果不得反向修改预期。AI 草案、保存操作和已预注册任务进入统一任务队列，显示加载与完成状态；详情抽屉展示任务说明、参数、故障、文件证据、Oracle 和样本阈值。
 - AI 适配器与任务草案遵守“限量读取资料 → 资料标记为不可信数据 → 生成可编辑草案 → 本地 AST／任务契约校验 → 用户显式保存 → 独立真实加载与预检 → 用户再次确认登记或运行”的顺序。AI 不自动登记、运行或参与 Oracle。
-- `POST /api/adapter-authoring/upload` 接收用户明确选择的 README、说明或源码文件，原件保存在 `external_agents/uploads/<uuid>/`，该目录必须由 Git 忽略；上传本身不调用模型。单次生成最多读取 6 个 UTF-8 文本文件，单文件 10,000 字符、总计 30,000 字符进入模型，仅允许 `.md / .txt / .py / .yaml / .yml / .json / .toml`；拒绝危险文件名、越界和不支持格式。Token 估算只是预算提示，不是账单。
-- 草案静态检查不导入或执行代码；适配器类按名称、基类及协议成员识别，辅助类不能仅因靠前而冒充适配器。草案只有显式保存才进入 `external_agents/drafts/<agent-id>.py`，已有文件不覆盖；保存后仍须真实加载、预检和人工登记。本地上传与 AI 生成共用适配器队列；详情展示说明、资料读取、警告和高亮代码，补充信息后重新生成只有成功才替换旧草案。
+- `POST /api/adapter-authoring/upload` 接收用户明确选择的 README、说明或源码文件，原件允许 `.md / .txt / .py / .yaml / .yml / .json / .toml`，保存在 `external_agents/uploads/<uuid>/` 且由 Git 忽略；上传本身不调用模型。单次生成最多读取 6 个 UTF-8 文本文件，单文件 10,000 字符、总计 30,000 字符进入模型；模型上下文只允许 `.md / .txt / .py` 以及文件名精确为 `pyproject.toml` / `package.json` 的项目清单。拒绝危险文件名、越界和不支持格式。Token 估算只是预算提示，不是账单。
+- 草案静态检查不导入或执行代码；适配器类按名称、基类及协议成员识别，辅助类不能仅因靠前而冒充适配器。`eval/exec/compile/__import__`、进程创建和递归删除等属于不可绕过的硬阻断；普通 `.run()`、`getattr`、`import_module`、`remove`、`unlink` 只形成人工复核警告，保存请求须显式确认已复核风险。草案只有显式保存才进入 `external_agents/drafts/<agent-id>.py`，已有文件不覆盖；保存后仍须真实加载、预检和人工登记。本地上传与 AI 生成共用适配器队列；详情展示说明、资料读取、警告和高亮代码，补充信息后重新生成只有成功才替换旧草案。
 - 草案请求保留用户思考模式，采样按默认温度、通用覆盖、建议专用覆盖、草案 `max_tokens` 合并。适配器与任务草案分别使用 16,000 / 8,000 Token 上限，120 秒超时且不自动重试；这些草案参数不进入 M3 冻结配置。
 - 任务表单提供“正常写入、参数边界、错误返回、空结果、异常传播”五种模板、YAML 模板下载与 AI 一键填写，适配器表单提供模板、文件上传和 AI 草案；快捷方式只填充可编辑内容，保存、登记和运行始终是独立人工操作。
 
@@ -337,7 +343,7 @@ console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地�
 - 参数校验异常如实记录 `ValidationError`；`return_value` 通过 ToolNode 的公开错误处理回调显式转换，`raise_exception` 保留框架失败信号。
 - 每次注入记录 original / replacement / raised / applied；测试必须比较实际内容，并检查 observation 确实进入下一次模型节点输入。参数未改变时不得声明注入成功。
 - 运行前硬校验宿主精确版本和 ToolNode / StateGraph 公开签名；升级后必须重新执行适配器及 CLI 端到端测试。
-- M3 任务必须预注册 `counterfactual_source`、模型 ID、采样参数与 `model.reasoning_mode`，只允许 `tool_result` 或 `observation` 注入。源 run 的宿主与故障声明必须一致，源产物只读。
+- M3 任务必须预注册 `counterfactual_source`、模型 ID、采样参数、`model.reasoning_mode` 与模型层 `expected_state_claim`，只允许 `tool_result` 或 `observation` 注入。源 run 的宿主与故障声明必须一致，源产物只读。缺少模型预期时在宿主执行前拒绝，不根据结果补填。
 - `reasoning_mode` 在套件启动前随实际模型选择冻结进任务副本和 `run.json`。`default` 使用提供方默认行为；`enabled` 显式启用思考；`disabled` 是显式非思考实验条件。界面和报告必须标注，禁止请求失败后静默切换模式。
 - 模型选项可通过 `FAULTLATTICE_LLM_<ID>_SAMPLING_PARAMS` 登记 JSON object 采样覆盖；选择模型时与任务预注册参数合并并显式冻结，覆盖值同时进入批次状态、界面和报告。建议请求默认 `temperature=0.2`，先应用同一通用覆盖，再应用 `FAULTLATTICE_LLM_<ID>_ADVISOR_SAMPLING_PARAMS` 建议专用覆盖；后者不得进入 M3。请求失败后不得自动改温、重试或更换模型。
 - M0 源轨迹只提供目标调用和故障契约。M3 首轮由本次真实模型生成与预注册名称、参数完全一致的唯一工具调用，再执行工具和故障注入；不匹配时在工具执行前终止，不重试、不改变故障坐标。`model_output.m3_phase` 区分 `prefix` 与 `continuation`，二者都不是预设输出。
@@ -359,7 +365,7 @@ console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地�
 
 ## 15. CI 回归质量门禁
 
-`faultlattice quality-gate` 只读取原始四件套，按 `task_id × host × mode × experiment_family × injection_point × fault_type × surface_as` 配对 baseline 与 current。版本化 baseline 配置登记仓库内真实运行目录；公开 CI 使用 `quality/public-sample.yaml` 和 `quality/external-agent-m0.yaml` 中的公开样例，不伪造运行或指标。
+`faultlattice quality-gate` 只读取原始四件套，按完整实验坐标配对 baseline 与 current。版本化 baseline 配置登记仓库内真实运行目录；公开 CI 的独立行为门禁用 `quality/public-sample.yaml` 现场生成 current，`quality/external-agent-m0.yaml` 的六个外部样例由公开产物测试复算四件套与报告完整性，不在干净 CI 冒充生产 Agent 重跑。
 
 以下任一情况使门禁失败并以退出码 1 报告；baseline 配置或调用方式错误仍属于 Harness 配置错误，以退出码 2 报告：
 
@@ -372,4 +378,4 @@ console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地�
 
 同一坐标允许包含多次运行，按层聚合计数。门禁不直接以沉默失败率上升代替上述证据，也不把 `explicit_failure` 自动视为 Harness 缺陷。可判定数低于任务 `min_evaluable`、没有可判定运行或证据不足超过预注册阈值时，`rate_stability` 分别记录 `below_min_evaluable` / `no_evaluable_runs` / `inconclusive_threshold_exceeded`，不得形成稳定比例结论。
 
-门禁报告默认写入 `reports/quality-gate.md`，包含完整坐标、baseline/current 数量、违规项和 ` ```json faultlattice-quality-gate ` 机器锚点。它是 CI 的附加回归层，不替代 pytest、Ruff、Pyright、仓库卫生检查或真实外部服务验收。
+门禁报告默认写入已忽略提交的 `runs/_quality/quality-gate.md`，包含完整坐标、baseline/current 数量、违规项和 ` ```json faultlattice-quality-gate ` 机器锚点；研发视图执行检查不得改写受版本控制的报告。它是 CI 的附加回归层，不替代 pytest、Ruff、Pyright、仓库卫生检查或真实外部服务验收。

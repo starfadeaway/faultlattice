@@ -30,7 +30,6 @@ export interface ProjectSnapshot {
     name: string
     subtitle: string
     version: string
-    root: string
     manifest: string
   }
   summary: {
@@ -155,7 +154,7 @@ export interface ExternalAgent {
   entrypoint: string
   class_name: string
   created_at: string
-  status: "ready" | "error"
+  status: "registered" | "ready" | "error"
   error: string | null
   host_name: string | null
   host_package_version: string | null

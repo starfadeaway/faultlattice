@@ -44,6 +44,7 @@ def replay_run(
     mode: ExecutionMode,
     runs_root: Path,
     repo_root: Path,
+    expected_failure_signal: bool | None = None,
 ) -> Path:
     """重放一次历史运行，返回新 run 目录。
 
@@ -58,6 +59,17 @@ def replay_run(
     # model_copy 不触发校验；构造普通任务数据后重新验证完整模式契约。
     # 校验发生在 execute_run 之前，因此失败不会执行宿主或留下半成品目录。
     data = manifest.task.model_dump(mode="json")
+    manual_expectations: list[str] = []
+    if data.get("expected_failure_signal") is None:
+        if expected_failure_signal is None:
+            raise ReplayError(
+                "历史运行缺少 expected_failure_signal；如已人工核对任务，请显式传 "
+                "--expected-failure-signal 或 --no-expected-failure-signal"
+            )
+        data["expected_failure_signal"] = expected_failure_signal
+        manual_expectations.append("expected_failure_signal")
+    elif expected_failure_signal is not None:
+        raise ReplayError("源运行已有预注册 expected_failure_signal，重放不得覆盖")
     data.update(
         {
             "mode": mode.value,
@@ -75,4 +87,10 @@ def replay_run(
         task = TaskDefinition.model_validate(data)
     except Exception as exc:
         raise ReplayError(f"重放任务契约不合法，尚未执行宿主: {exc}") from exc
-    return execute_run(task, host, runs_root=runs_root, repo_root=repo_root)
+    return execute_run(
+        task,
+        host,
+        runs_root=runs_root,
+        repo_root=repo_root,
+        manual_expectations=manual_expectations,
+    )

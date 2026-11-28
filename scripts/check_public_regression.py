@@ -42,7 +42,7 @@ def run_public_regression(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", type=Path, default=Path("quality/public-sample.yaml"))
-    parser.add_argument("--output", type=Path, default=Path("reports/quality-gate.md"))
+    parser.add_argument("--output", type=Path, default=Path("runs/_quality/quality-gate.md"))
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     output = args.output if args.output.is_absolute() else root / args.output

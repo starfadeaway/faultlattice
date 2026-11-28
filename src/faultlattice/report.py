@@ -283,7 +283,7 @@ REPORT_TEMPLATE = Template(
 - Oracle 覆盖率：可判定运行数 ÷ 适用运行数；单次报告只显示原始数量，不把 1/1 渲染成稳定覆盖率。
 - 证据不足次数：Oracle 无法获得足够证据的次数，与“测试通过”或“发现缺陷”都不同。
 
-**预注册最低可判定样本数：{{ min_evaluable }}。** 单运行报告始终只作定性案例；即使该阈值为 1，也不把一次结果换算成稳定比例。下方机器锚点仍保留原始数值，供同坐标批次聚合和独立复算。
+**任务预注册最低样本数：{{ min_evaluable }}；平台描述比例阈值：{{ descriptive_threshold }}。** 实际采用两者较大值。单运行报告始终只作定性案例；即使任务阈值为 1，也不把一次结果换算成稳定比例。下方机器锚点仍保留原始数值，供同坐标批次聚合和独立复算。
 
 ## 七、结果边界与常见误读
 
@@ -496,25 +496,27 @@ def _outcome_summary(
         "completed": "正常完成（`completed`）",
         "failed": "明确失败（`failed`）",
     }.get(outcome, "未记录")
-    if succeeded is True and outcome == "failed":
+    # 人读结论必须由同一 Oracle verdict 驱动，不能用原始信号另造一套判定树。
+    if verdict is FrameworkVerdict.EXPLICIT_FAILURE:
+        business = "业务后置条件已满足，但工具故障按预注册呈现" if succeeded is True else "业务任务未完成"
         headline = (
-            "**业务任务实际完成，但框架向调用方报告失败。** 实际状态与调用方信号不一致，"
-            "因此本次判为违反预注册契约；不能笼统写成“写入未验证”。"
+            f"**{business}，框架返回了明确失败信号。** 这符合本次任务的显式失败处理预期；"
+            "业务副作用与调用方信号分别记录，不互相否定。"
         )
-    elif succeeded is False and outcome == "failed":
+    elif verdict is FrameworkVerdict.SILENT_FAILURE:
         headline = (
-            "**业务任务未完成，框架返回了明确失败信号。** 这符合本次故障任务的显式失败处理预期，"
-            "但不证明其他任务、模型或真实模型反应也已通过。"
+            "**本次存在沉默失败。** 框架未按预注册契约暴露失败，或缺少成功声明所需的实际执行证据；"
+            "请结合业务状态、调用方信号和下方证据处理。"
         )
-    elif succeeded is False and outcome == "completed":
+    elif verdict is FrameworkVerdict.CONTRACT_VIOLATION:
         headline = (
-            "**业务任务未完成，框架却报告正常完成。** 本次存在沉默失败或契约风险，"
-            "应结合下方 Oracle 判定与状态证据处理。"
+            "**框架行为违反本次预注册契约。** 业务状态或调用方信号与任务预期不一致；"
+            "该结论只适用于当前冻结坐标。"
         )
-    elif succeeded is True and outcome == "completed":
-        headline = "**业务任务完成，框架报告正常完成。** 该结论仅适用于当前一次预注册坐标。"
+    elif verdict is FrameworkVerdict.COMPLETED:
+        headline = "**业务任务完成，框架按预注册契约报告正常完成。** 该结论仅适用于当前一次预注册坐标。"
     else:
-        headline = "**业务状态证据不足，无法给出可靠的成功或失败结论。** 请先看观察失败原因。"
+        headline = "**业务状态或判定证据不足，无法给出可靠的成功或失败结论。** 请先看观察失败原因。"
     if verdict is FrameworkVerdict.INCONCLUSIVE:
         headline = "**本次为证据不足（inconclusive），不是测试通过或 Agent 缺陷结论。** " + headline
     model = next((item for item in judgements if item.layer is TargetLayer.MODEL), None)
@@ -806,6 +808,12 @@ def render_report(run_dir: Path) -> str:
     injection_boundary, observation_boundary, model_boundary = _boundary_text(manifest)
     headline, outcome_summary = _outcome_summary(manifest, judgements)
     legacy_warnings = []
+    if manifest.manual_expectations:
+        legacy_warnings.append(
+            "本次重放的人工补充预期（"
+            + "、".join(manifest.manual_expectations)
+            + "）已写入新 run.json；它们不是源运行的预注册事实，不能用于新旧行为对比"
+        )
     if task.expected_failure_signal is None:
         legacy_warnings.append(
             "该历史运行没有机器可判定的 expected_failure_signal，框架层 verdict 仅按旧口径保留，不能用于新契约下的行为比较"
@@ -910,6 +918,7 @@ def render_report(run_dir: Path) -> str:
         model_boundary=model_boundary,
         versions=_version_view(manifest),
         min_evaluable=task.min_evaluable,
+        descriptive_threshold=max(3, task.min_evaluable),
         framework=_view(metrics["framework"]),
         model=_view(model_metrics) if model_metrics else None,
         metrics_json=canonical_dumps(metrics),

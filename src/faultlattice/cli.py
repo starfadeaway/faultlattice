@@ -12,7 +12,6 @@ CLI 是 core 与 adapters 的装配点：只有这里允许同时 import 两边�
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Annotated
 
@@ -78,26 +77,19 @@ def _model_for(task):
 
     if task.model is None:
         raise ConfigurationError("M3 任务缺少 model 预注册")
-    # CLI 与研发视图使用同一模型目录；只能按预注册 model_id 精确匹配，不能换模型。
-    from console.server.models import discover_model_options
+    # 核心目录只校验本次模型；控制台反向复用核心，安装后不依赖仓库根 console。
+    from faultlattice.model_catalog import resolve_model_option
 
-    option = next(
-        (item for item in discover_model_options() if item.model_id == task.model.model_id),
-        None,
-    )
-    api_key = option.api_key if option else os.environ.get("FAULTLATTICE_MODEL_API_KEY", "").strip()
-    base_url = (
-        option.base_url
-        if option
-        else os.environ.get("FAULTLATTICE_MODEL_BASE_URL", "").strip() or None
-    )
-    if not api_key:
+    option = resolve_model_option(task.model.model_id)
+    if option is None:
         raise ConfigurationError(
             f"M3 需要模型 {task.model.model_id} 的完整 LLM 目录项或兼容默认凭据"
         )
     from faultlattice.adapters.openai_model import OpenAICompatibleModel
 
-    return OpenAICompatibleModel(task.model, api_key=api_key, base_url=base_url)
+    return OpenAICompatibleModel(
+        task.model, api_key=option.api_key, base_url=option.base_url
+    )
 
 
 def _handle_errors(func, *args, **kwargs):
@@ -129,7 +121,7 @@ def run(
         if task.host == "external":
             if not agent_id:
                 raise ConfigurationError("外部任务必须显式提供 --agent-id 并通过登记预检")
-            from console.server.external_agents import ExternalAgentService
+            from faultlattice.external_registry import ExternalAgentService
 
             try:
                 task_path = task_file.resolve().relative_to(_repo_root()).as_posix()
@@ -160,6 +152,13 @@ def replay(
     run_dir: Annotated[Path, typer.Argument(help="源 run 目录。")],
     mode: Annotated[ExecutionMode, typer.Option(help="重放模式：M1 / M2。")] = ExecutionMode.M1,
     runs_root: Annotated[Path, typer.Option(help="运行产物根目录。")] = Path("runs"),
+    expected_failure_signal: Annotated[
+        bool | None,
+        typer.Option(
+            "--expected-failure-signal/--no-expected-failure-signal",
+            help="仅为缺失该字段的历史运行人工补充预期；会写入新清单留痕。",
+        ),
+    ] = None,
 ) -> None:
     """重放一次历史运行（M1 纯轨迹 / M2 故障注入）。"""
     from faultlattice.replay import replay_run
@@ -169,7 +168,12 @@ def replay(
     def _go() -> Path:
         host = _host_for(load_manifest(run_dir).task.host)
         new_dir = replay_run(
-            run_dir, host, mode=mode, runs_root=runs_root, repo_root=_repo_root()
+            run_dir,
+            host,
+            mode=mode,
+            runs_root=runs_root,
+            repo_root=_repo_root(),
+            expected_failure_signal=expected_failure_signal,
         )
         generate_report(new_dir)
         return new_dir
@@ -369,7 +373,7 @@ def quality_gate(
     ],
     output: Annotated[
         Path, typer.Option("--output", help="门禁 Markdown 报告。")
-    ] = Path("reports/quality-gate.md"),
+    ] = Path("runs/_quality/quality-gate.md"),
 ) -> None:
     """配对原始四件套并拒绝登记的行为或产物回归；不替代测试和静态检查。"""
     from faultlattice.quality import (

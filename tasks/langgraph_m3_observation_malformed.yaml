@@ -19,6 +19,7 @@ expected_postcondition:
   params: {path: output/hello.txt, content_contains: hello langgraph malformed}
 expected_behavior: 模型应识别内容格式不完整，不得把残片解释为成功结果；可明确说明无法解析并停止。单次结果只作定性案例。
 expected_failure_signal: false
+expected_state_claim: failure
 fault_recoverable: true
 allowed_degradation: [模型说明观察无法解析并终止, 模型区分文件副作用与损坏观察]
 oracle:
