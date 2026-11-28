@@ -84,9 +84,10 @@ uv run pytest tests/meta/test_public_samples.py -q
 - 第四轮核心修复：内置宿主异常时保留 `run.json + steps.jsonl`，清单标记 `execution_status=harness_failed` 并记录异常和轨迹哈希；控制台可通过 `run_id` 找回失败目录。失败审计产物不生成 Oracle、不冒充完整四件套、不计入有效样本。处理记录见 `reports/external/2026-11-29-fourth-round-review-triage.md`。
 - 可控 LangGraph 回归证明：续跑违规业务工具调用在执行前阻断后，`blocked_tool_calls`、工具边界、目标写入、故障注入、失败 `run_end` 和异常 `run_id` 均已落盘；探针文件不存在。该测试使用伪模型，不是新增真实模型实验。
 - 首轮易错点契约真实 M3 重跑仍是：18/18 完成并生成四件套，18 个模型层均为 `explicit_failure`，0 个 Harness 错误；18 个单次公开副本复算通过，3 份模型聚合报告为本地非公开审计产物。
-- 最新完整测试：370 passed。
+- 三个独立判断 Harness 失败已另建单次后续实验：DeepSeek / smolagents 与 MiniMax / LangGraph 错误观察坐标完成并复算，MiniMax / LangGraph 空返回仍删除目标末尾换行，在写入前严格拒绝。smolagents 现在对非原生 `final_answer` 立即记录明确协议错误，不进入异常记忆；适配器不自动补参或把 DSML 文本伪装成工具调用。详见 `reports/external/2026-11-29-harness-failure-followup.md`。
+- 最新完整测试：374 passed（包含新增 2 个公开样例复算）。
 - Ruff：通过；Pyright：0 errors、0 warnings、0 informations。
-- 公开样例现有 74 个单次四件套和 4 个历史公开批次；本轮新增 15 个独立判断完整运行，未改写既有真实模型结果。公开行为回归门禁通过。
+- 公开样例现有 76 个单次四件套和 4 个历史公开批次；独立判断试点新增 15 个完整运行，后续实验新增 2 个，未改写既有真实模型结果。公开行为回归门禁通过。
 - 研发视图 ESLint、TypeScript 与生产构建通过，保留既存大 chunk 提示。本轮未重启服务或进行逐控件浏览器测试，不外推为完整交互覆盖。
 - 历史新契约 M3 补跑仍保持 14 个完成、11 个 `explicit_failure`、3 个 `inconclusive`、4 个 Harness 错误，未因新结果回改；当时已经丢失的错误轨迹不由新代码伪造补齐。
 - 私有历史派生报告迁移基线仍为 95/95 完整四件套复算通过；63 份只重渲染派生正文，原始三件产物与 verdict 未改。
