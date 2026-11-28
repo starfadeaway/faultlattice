@@ -92,7 +92,8 @@ uv run pytest tests/meta/test_public_samples.py -q
 - 私有历史派生报告迁移基线仍为 95/95 完整四件套复算通过；63 份只重渲染派生正文，原始三件产物与 verdict 未改。
 - 确定性本地行为门禁使用当前代码现场生成 independent current；输出写入 `runs/_quality/`，不修改跟踪报告。
 - 仓库卫生检查与 `git diff --check`：通过；真实 `.env` 与私有运行目录不由 Git 跟踪。
-- 被审查提交 `cd531a7fba0e9ce4dd6a440153924e29cf7d5715` 的 GitHub Actions run `46161500683` 已核实为 `completed / success`，Ubuntu 与 Windows 均成功；第四轮修复属于该提交之后的新工作区变更，须由后续提交和 CI 独立验收。
+- 被审查提交 `cd531a7fba0e9ce4dd6a440153924e29cf7d5715` 的 GitHub Actions run `46161500683` 已核实为 `completed / success`，Ubuntu 与 Windows 均成功。
+- 第四轮修复提交 `b5dd7dd9398d61071625b4b0746a2b735c05d992` 已公开推送；对应 GitHub Actions run `46165131495` 为 `completed / success`，Ubuntu 与 Windows 均成功，与本地 348 项测试及前端检查结果一致。
 - 公开 CI 所需 M0 源轨迹已进入 `runs/_sample/`，四件套可独立复算；清单仅把本机绝对目录改为相对公开目录。
 
 ## 五、已知限制
