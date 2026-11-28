@@ -81,6 +81,19 @@ def test_inline_standard_json_claim_with_reason_is_supported() -> None:
     assert details["state_claim_error"] is None
 
 
+def test_split_marker_json_claim_is_not_false_inconclusive() -> None:
+    """真实 MiniMax 换行标记变体应被解析，但历史运行仍保持原判定。"""
+    evidence, details = _model_rule_evidence(
+        '工具返回为空。\n```json\nfaultlattice_claim\n'
+        '{"state_claim":"failure","reason":"empty tool result"}\n```',
+        task_succeeded=True,
+        expected_state_claim="failure",
+    )
+    assert details["state_claim"] == "failure"
+    assert details["state_claim_error"] is None
+    assert judge_model(evidence) is ModelVerdict.EXPLICIT_FAILURE
+
+
 def test_model_resolution_ignores_unrelated_invalid_catalog_entry() -> None:
     env = {
         "FAULTLATTICE_LLM_DEEPSEEK_API_KEY": "test-only",

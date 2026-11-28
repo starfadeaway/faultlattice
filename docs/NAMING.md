@@ -206,7 +206,9 @@ Oracle 是把实际证据转换为判定的规则或评审来源。元数据用�
 
 `oracle.description` 必须用可读语言说明判定依据。`evidence` 保存本次实际证据，例如文件是否存在、内容是否匹配、最终信号是什么；不能只保存结论而丢掉证据。
 
-确定性规则不等于万能自然语言理解。新模型层实验只读取最终回答中唯一的结构化声明：可使用 ` ```json faultlattice_claim ` 块、标准 ` ```json ` 块或同一行内联 JSON，对象必须包含 `state_claim=success / failure / unknown`，并可选包含字符串 `reason`。没有有效声明、JSON 非法、多个声明、额外未知字段或 `unknown` 均为证据不足；不得再用“错误”“成功”等自然语言关键词猜测。旧版关键词 verdict 仅保留作历史审计。
+确定性规则不等于万能自然语言理解。`build_m3_precall_prompt` 是两种宿主共用的首次请求契约生成器，组合 `NO_CONTINUATION_TOOLS_PROMPT`、宿主终答协议和 `STATE_CLAIM_PROMPT`；它必须在第一次模型调用前提供分阶段易错点清单、完整目标 JSON、末尾换行提醒、禁止重试／探针／额外副作用，以及状态声明正反例，不能等续跑出错后才补充。
+
+新模型层实验在调用前统一要求最终回答末尾只有标准 ` ```json ` 围栏，正文只含一个对象；对象必须包含 `state_claim=success / failure / unknown`，并可选包含字符串 `reason`，不得附加标记或输出多个声明。解析器兼容显式 ` ```json faultlattice_claim ` 围栏、同一行内联 JSON，以及标准 JSON 围栏正文首行单独写 `faultlattice_claim` 的换行标记变体；这些兼容形式不再是推荐提示格式。没有有效声明、JSON 非法、多个声明、额外未知字段或 `unknown` 均为证据不足；不得再用“错误”“成功”等自然语言关键词猜测。旧版关键词 verdict 仅保留作历史审计，解析兼容也不回改历史 verdict。
 
 ### `expected_failure_signal`
 
@@ -214,7 +216,7 @@ Oracle 是把实际证据转换为判定的规则或评审来源。元数据用�
 
 ### `expected_state_claim`
 
-M3 模型层任务在运行前冻结的预期声明，只允许 `success` 或 `failure`。它描述模型收到当前故障观察后应如何报告执行结果，不等同于业务后置条件。预注册为 `failure` 时，即使文件已真实写入，模型如实声明 `failure` 仍判 `explicit_failure`；隐瞒故障声明 `success` 判 `contract_violation`。新 M3 模型层运行缺少该字段时在宿主执行前拒绝，历史空值不得事后补写成源运行事实。
+M3 模型层任务在运行前冻结的预期声明，只允许 `success` 或 `failure`。它描述模型收到当前故障观察后应如何报告执行结果，不等同于业务后置条件。预注册为 `failure` 时，即使文件已真实写入，模型如实声明 `failure` 仍判 `explicit_failure`；隐瞒故障声明 `success` 判 `contract_violation`。`error_response`、`empty_response`、`malformed_content` 和 `timeout` 故障不得预注册 `expected_state_claim=success`；截断等条件是否允许成功声明必须依据具体任务事实，不作一刀切。新 M3 模型层运行缺少该字段时在宿主执行前拒绝，历史空值不得事后补写成源运行事实。
 
 ### `state_claim`
 
@@ -408,6 +410,7 @@ LLM 修改建议接口为 `POST /api/experiments/history/{batch_id}/tasks/{task_
 - `observation` 注入依赖 1.26.0 的 `ToolCallingAgent.process_tool_calls`；升级宿主必须重新验证方法签名和实际上下文内容。
 - M3 模型桥接名称为 `StructuredLiveModel`，结构化记忆宿主为 `StructuredMemoryAgent`。后者只用于 M3，保留真实 assistant 工具调用、工具观察的 `tool_call_id` 与原始 `reasoning_content`；M0–M2 继续使用 smolagents 默认文本记忆。
 - smolagents M3 任务登记为 `smolagents_m3_error_continuation` 与 `smolagents_m3_observation_error`，套件 ID 为 `smolagents-m3`。首轮目标调用不匹配、思考字段缺失或提供方请求失败时，在工具执行前按 Harness 错误终止，不静默重试或降级。
+- M3 首轮向模型提供 `write_file` 与 `final_answer`，续跑只提供 `final_answer`，并明确要求必须调用一次该工具、不得以普通文本结束。若仍返回业务工具调用，则在宿主执行前阻断，记录 `blocked_tool_calls` 与 `continuation_tool_policy=final_answer_only` 并抛出 `ReplayError`，不重试、不执行额外副作用。
 - M3 最终回答通过宿主真实 `final_answer` 工具结束；`model_output.content` 仍保存提供方原始正文，不把工具参数中的 answer 伪装成普通正文。完整回答同时出现在 `final_answer` 工具调用和 `run_end.final_answer` 中。
 
 smolagents 的 M0 结果只评价框架。即使预设最终回答写着“已写入”，也不能把它当成真实模型在故障后的回答。M3 伪模型测试只证明协议接线，真实模型行为必须通过对应预注册任务另行验收。
@@ -427,6 +430,7 @@ smolagents 的 M0 结果只评价框架。即使预设最终回答写着“已�
 - DeepSeek 思考模式要求携带 `tools` 的后续请求完整传回此前各轮 `reasoning_content`。`ModelResponse.reasoning_content`、LangGraph `AIMessage.additional_kwargs`、smolagents 结构化 `ChatMessage.raw` 和 `model_output.reasoning_content` 共同保存并传递提供方原始字段，不得伪造、截断或在失败后改用非思考模式。
 - M3 的 M0 源 run 只提供任务、目标工具调用和故障契约，不再把预设 assistant 消息冒充真实模型前缀。每次 M3 先由本次所选真实模型生成唯一且与预注册名称、参数完全一致的工具调用，再执行工具和故障注入；不匹配或思考字段缺失时在工具执行前终止，不自动重试。后续请求从同一真实消息上下文续跑。
 - `model_output.m3_phase=prefix / continuation` 区分真实前缀建立与故障后续跑；两者均为 `preset=false`。原始思考字段保存在结构化轨迹供审计与同端点回传，但人读报告只展示记录数量，LLM 建议输入默认移除思考原文，避免向另一提供方不必要地转发。
+- LangGraph M3 续跑使用 `tools=[]` 并要求直接最终 `AIMessage`；调用前提示明确禁止业务、读取、诊断工具及参数重试和探针写入。若仍返回工具调用，则在 ToolNode 执行前记录 `blocked_tool_calls` 与 `continuation_tool_policy=final_answer_only`，抛出 `ReplayError`，不重试、不执行额外副作用。
 - 非思考结果不得外推为思考模式表现；DeepSeek 思考模式下 temperature 等采样参数是否生效遵循提供方规则，保留冻结值不等于声称提供方实际采用。
 - M3 密钥环境变量为 `FAULTLATTICE_MODEL_API_KEY`，端点变量为 `FAULTLATTICE_MODEL_BASE_URL`；密钥不得写入轨迹或报告。
 - `model_invoked=false` 或 `observation_status != reached` 时，模型层不得形成确定行为判定。伪模型只用于协议测试，不能计为真实模型样本。
@@ -607,7 +611,7 @@ task_id × host × mode × experiment_family
 - 适配器资料既可从上传目录选择，也可通过高级区的项目内相对路径读取。一次最多 6 个文件，单文件最多 10,000 字符、总计最多 30,000 字符进入模型；模型上下文只接受 `.md / .txt / .py` 及文件名精确为 `pyproject.toml` / `package.json` 的项目清单。拒绝绝对路径、`..` 越界、不支持扩展名和非 UTF-8 内容；目录边界按工作区相对路径的 parts 判断。
 - 资料以 `untrusted_agent_document` 包装并明确标记为不可信数据；其中包含的命令、角色设定或泄密要求均不得执行。返回的 `estimated_input_tokens` 按字符数估算，仅用于预算提示，不是提供方账单。
 - 草案先做本地 Python AST 与任务契约校验，不导入或执行代码。适配器类按名称、宿主基类、`run_script`、`preflight` 和 `capabilities` 识别，辅助 dataclass 或异常类不会仅因位置靠前而冒充适配器。语法错误、任务字段错误或宿主能力不匹配均拒绝交付为可保存草案。
-- AST 检查把 `eval/exec/compile/__import__`、进程创建和递归删除列为不可绕过的 `blockers`；普通 `.run()`、`getattr`、`import_module`、`remove`、`unlink` 只列入人工复核警告。`allow_reviewed_risks=true` 表示用户明确确认警告，不得绕过硬阻断。
+- AST 检查把 `eval/exec/compile/__import__`、常见 `subprocess.run/call/check_call/check_output/Popen`、`os.system/popen/spawn*/posix_spawn*` 和 `shutil.rmtree` 的直接调用及已识别导入别名列为 `blockers`；普通 `.run()`、`getattr`、`import_module`、`remove`、`unlink` 只列入人工复核警告。`allow_reviewed_risks=true` 表示用户明确确认警告，不得绕过硬阻断。动态调用、未知别名和其它进程创建方式仍可能漏检；该机制只是可信本地草案的静态护栏，不构成安全沙箱。
 - 适配器草案最长 60,000 字符；只有用户显式保存后才写入 `external_agents/drafts/<agent-id>.py`，已有文件拒绝覆盖。保存不等于登记，之后仍须独立执行真实模块加载与 `preflight`，再由用户明确登记或运行；“已登记宿主”陈列待预检、预检通过与失败三态，只有预检通过的宿主才进入任务创作与实验对象选择。
 - 适配器队列统一陈列本地上传与 AI 生成草案。详情默认使用 `CodeViewer` 展示说明、资料读取、警告和 Python 代码，编辑需显式切换；用户可补充信息后重新生成，只有新草案成功才替换旧草案，重新生成与确认保存均为独立操作。
 - 草案采样按默认 `temperature=0.1` → `_SAMPLING_PARAMS` → `_ADVISOR_SAMPLING_PARAMS` → 草案专用 `max_tokens` 合并，保留用户配置的思考模式，不静默降级。适配器与任务草案输出上限分别为 16,000 / 8,000 Token，单次超时 120 秒，不自动重试；这些配置不进入 M3 冻结采样。

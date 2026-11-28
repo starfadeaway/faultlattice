@@ -55,6 +55,35 @@ def test_m3_rejects_tool_args_continuation() -> None:
         TaskDefinition.model_validate(raw)
 
 
+@pytest.mark.parametrize("fault_type", ["timeout", "empty_response", "malformed_content", "error_response"])
+def test_unambiguous_m3_fault_rejects_preregistered_success_claim(fault_type: str) -> None:
+    raw = load_task(REPO_ROOT / "tasks" / "langgraph_m3.yaml").model_dump(mode="json")
+    raw["fault"]["fault_type"] = fault_type
+    raw["fault"]["surface_as"] = "return_value"
+    raw["expected_state_claim"] = "success"
+
+    with pytest.raises(ConfigurationError, match="不得预注册 expected_state_claim=success"):
+        TaskDefinition.model_validate(raw)
+
+
+def test_truncated_m3_fault_can_preregister_a_separately_justified_success_claim() -> None:
+    raw = load_task(REPO_ROOT / "tasks" / "langgraph_m3.yaml").model_dump(mode="json")
+    raw["fault"]["fault_type"] = "truncated"
+    raw["fault"]["surface_as"] = "return_value"
+    raw["expected_state_claim"] = "success"
+
+    assert TaskDefinition.model_validate(raw).expected_state_claim == "success"
+
+
+def test_historical_m3_missing_state_claim_remains_readable_without_backfill() -> None:
+    raw = load_task(REPO_ROOT / "tasks" / "langgraph_m3.yaml").model_dump(mode="json")
+    raw["expected_state_claim"] = None
+
+    task = TaskDefinition.model_validate(raw)
+    assert task.expected_state_claim is None
+    assert "expected_state_claim" in task.model_dump(mode="json")
+
+
 def test_mixed_success_and_error_answer_is_not_misclassified() -> None:
     evidence, details = _model_rule_evidence("文件已写入，但工具返回错误。", True)
     assert evidence.evidence_sufficient is False

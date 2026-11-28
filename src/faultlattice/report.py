@@ -823,7 +823,7 @@ def render_report(run_dir: Path) -> str:
         for item in judgements
     ):
         legacy_warnings.append(
-            "模型层 verdict 来自旧版自然语言关键词规则，是否定句与混合表述均可能误判；它不是已验证的模型行为结论，需按结构化 state_claim 契约重新实验"
+            "模型层 verdict 来自旧版自然语言关键词规则，是否定句与混合表述均可能误判；它不是已验证的模型行为结论，需按结构化 state_claim 与运行前冻结 expected_state_claim 的新契约重新实验"
         )
     legacy_contract_warning = "；".join(legacy_warnings)
 

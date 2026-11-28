@@ -44,7 +44,7 @@ interface AdapterQueueItem {
 }
 
 const defaultGoal = "根据项目 README 和参考实现，为一个真实文件写入 Agent 生成 HostAdapter 草案。声明实际支持的 M0、工具与故障注入点；信息不足处保留 TODO，不编造宿主接口。"
-const acceptedDocuments = ".md,.txt,.py,.toml,.json"
+const acceptedDocuments = ".md,.txt,.py,.toml,.json,.yaml,.yml"
 
 export function AdapterDraftAssistant({ currentAgentId, models, modelOptionId, onModelChange, onUseDraft }: Props) {
   const [sourcePaths, setSourcePaths] = useState("README.md\nexamples/external_agent/reference_agent.py")

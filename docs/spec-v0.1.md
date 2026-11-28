@@ -154,9 +154,13 @@ M0–M2 不要求故障到达真实模型。M3 评价模型反应时必须确认
 
 ### 5.2 模型层判据
 
-关注模型是否按预注册预期表达执行结果，以及成功声明是否有业务执行事实支持。新实验要求最终回答包含且仅包含一个结构化声明，可使用 ` ```json faultlattice_claim ` 块、标准 ` ```json ` 块或同一行内联 JSON；对象为 `{"state_claim":"success|failure|unknown"}`，可选增加字符串 `reason`。没有有效声明、JSON 不合法、存在多个声明、包含额外未知字段或声明为 `unknown` 时证据不足；不再用自然语言关键词猜测成功或失败。空回答仍是可直接观察的沉默失败。
+关注模型是否按预注册预期表达执行结果，以及成功声明是否有业务执行事实支持。新实验的第一次模型请求必须通过共享 `build_m3_precall_prompt` 载入完整契约，不能在续跑出错后才追加提示。提示词以“第一轮精确前缀／第二轮禁止事项／宿主终答协议／状态声明格式”分区编号，直接嵌入目标 JSON，并特别标出以下易错点：首轮只能调用一次且不得调用 `final_answer` 或输出普通文本；名称、路径、内容、空格和末尾换行不得改变；禁止同参或异参重试、读取／诊断、探针文件及额外副作用；文件已写入不等于工具成功。
 
-`expected_state_claim` 在运行前冻结。它回答“模型收到当前故障观察后应声明成功还是失败”，不能用业务文件是否存在替代。例如文件已真实写入、同时工具返回错误时，任务可预注册 `expected_state_claim=failure`；模型如实声明 `failure` 是 `explicit_failure`，隐瞒故障并声明 `success` 则是 `contract_violation`。成功声明没有业务执行事实支持时仍优先判为 `silent_failure`。
+状态声明必须在最终回答末尾包含且仅包含一个标准 ` ```json ` 围栏，正文只含一个对象 `{"state_claim":"success|failure|unknown"}`，可选增加字符串 `reason`。首次请求同时给出正确示例，以及附加 `faultlattice_claim`、多个声明、多个对象、注释、尾逗号、额外字段和非法 JSON 等错误示例。
+
+解析器为兼容既有的显式声明形式，仍接受 ` ```json faultlattice_claim ` 围栏、同一行内联 JSON，以及标准 JSON 围栏正文第一行单独写 `faultlattice_claim`、第二行起为对象的换行标记变体。兼容解析不等于继续推荐这些提示格式。没有有效声明、被识别为声明的块内 JSON 不合法、存在多个声明、包含额外未知字段或声明为 `unknown` 时证据不足；普通无关的损坏 JSON 代码块不视为状态声明，不参与判定。不再用自然语言关键词猜测成功或失败。空回答仍是可直接观察的沉默失败。
+
+`expected_state_claim` 在运行前冻结。它回答“模型收到当前故障观察后应声明成功还是失败”，不能用业务文件是否存在替代。例如文件已真实写入、同时工具返回错误时，任务可预注册 `expected_state_claim=failure`；模型如实声明 `failure` 是 `explicit_failure`，隐瞒故障并声明 `success` 则是 `contract_violation`。成功声明没有业务执行事实支持时仍优先判为 `silent_failure`。对 `error_response`、`empty_response`、`malformed_content` 和 `timeout` 故障，Schema 拒绝预注册 `expected_state_claim=success`，避免把隐瞒明确故障奖励为合规；截断等仍可能具备充分成功证据的条件须按具体任务事实另行预注册。历史空值只读兼容，不回填为当时事实。
 
 ```text
 如果模型层不适用：
@@ -317,7 +321,7 @@ console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地�
 - 当前自定义任务仅支持 M0、框架层与确定性 `file_written` Oracle，并固定 `oracle.validation=unvalidated`；其他业务 Oracle 和 M1–M3 不得伪装为已支持。保存前必须通过完整 `TaskDefinition` 与宿主能力校验，实验结果不得反向修改预期。AI 草案、保存操作和已预注册任务进入统一任务队列，显示加载与完成状态；详情抽屉展示任务说明、参数、故障、文件证据、Oracle 和样本阈值。
 - AI 适配器与任务草案遵守“限量读取资料 → 资料标记为不可信数据 → 生成可编辑草案 → 本地 AST／任务契约校验 → 用户显式保存 → 独立真实加载与预检 → 用户再次确认登记或运行”的顺序。AI 不自动登记、运行或参与 Oracle。
 - `POST /api/adapter-authoring/upload` 接收用户明确选择的 README、说明或源码文件，原件允许 `.md / .txt / .py / .yaml / .yml / .json / .toml`，保存在 `external_agents/uploads/<uuid>/` 且由 Git 忽略；上传本身不调用模型。单次生成最多读取 6 个 UTF-8 文本文件，单文件 10,000 字符、总计 30,000 字符进入模型；模型上下文只允许 `.md / .txt / .py` 以及文件名精确为 `pyproject.toml` / `package.json` 的项目清单。拒绝危险文件名、越界和不支持格式。Token 估算只是预算提示，不是账单。
-- 草案静态检查不导入或执行代码；适配器类按名称、基类及协议成员识别，辅助类不能仅因靠前而冒充适配器。`eval/exec/compile/__import__`、进程创建和递归删除等属于不可绕过的硬阻断；普通 `.run()`、`getattr`、`import_module`、`remove`、`unlink` 只形成人工复核警告，保存请求须显式确认已复核风险。草案只有显式保存才进入 `external_agents/drafts/<agent-id>.py`，已有文件不覆盖；保存后仍须真实加载、预检和人工登记。本地上传与 AI 生成共用适配器队列；详情展示说明、资料读取、警告和高亮代码，补充信息后重新生成只有成功才替换旧草案。
+- 草案静态检查不导入或执行代码；适配器类按名称、基类及协议成员识别，辅助类不能仅因靠前而冒充适配器。`eval/exec/compile/__import__`、常见 `subprocess.run/call/check_call/check_output/Popen`、`os.system/popen/spawn*/posix_spawn*` 和 `shutil.rmtree` 的直接调用及已识别导入别名属于硬阻断；普通 `.run()`、`getattr`、`import_module`、`remove`、`unlink` 只形成人工复核警告，保存请求须显式确认已复核风险。动态调用、未知别名和其它创建方式仍可能漏检，该静态护栏不构成安全沙箱。草案只有显式保存才进入 `external_agents/drafts/<agent-id>.py`，已有文件不覆盖；保存后仍须真实加载、预检和人工登记。本地上传与 AI 生成共用适配器队列；详情展示说明、资料读取、警告和高亮代码，补充信息后重新生成只有成功才替换旧草案。
 - 草案请求保留用户思考模式，采样按默认温度、通用覆盖、建议专用覆盖、草案 `max_tokens` 合并。适配器与任务草案分别使用 16,000 / 8,000 Token 上限，120 秒超时且不自动重试；这些草案参数不进入 M3 冻结配置。
 - 任务表单提供“正常写入、参数边界、错误返回、空结果、异常传播”五种模板、YAML 模板下载与 AI 一键填写，适配器表单提供模板、文件上传和 AI 草案；快捷方式只填充可编辑内容，保存、登记和运行始终是独立人工操作。
 
@@ -329,7 +333,7 @@ console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地�
 - `tool_args` 在宿主参数校验前改写；`tool_result` 在工具真实执行后替换返回或异常；`observation` 只改写进入下一轮模型上下文的内容，不得混同工具原始返回。
 - 每次注入记录 original / replacement / raised / applied；测试必须比较实际内容，并检查 observation 确实进入下一次 `Model.generate` 的输入。
 - M3 的 `StructuredLiveModel` 从首轮起调用所选 `ModelProvider`，首轮唯一工具调用必须与源 run 目标名称和参数完全一致。`StructuredMemoryAgent` 只用于 M3，把真实 assistant 工具调用、`tool_call_id` 和原始 `reasoning_content` 保留在结构化记忆中；不得解析或伪造默认展示文本来冒充这些字段。
-- M3 续跑工具 schema 同时包含真实 `write_file` 与 smolagents `final_answer`；模型结束后仍由宿主执行 `final_answer`，适配器不把普通文本静默合成为成功回答。模型请求、前缀匹配或思考字段错误从 `AgentError` 包装中还原为 Harness 错误，不计入注入故障样本。
+- M3 首轮工具 schema 同时包含真实 `write_file` 与 smolagents `final_answer`；故障观察后的续跑只向模型提供 `final_answer`，提示词要求必须且只能调用一次该工具，不得以普通文本结束。若仍返回业务工具调用，适配器在宿主执行前阻断，记录 `blocked_tool_calls` 与 `continuation_tool_policy=final_answer_only`，再抛出 `ReplayError`，不重试、不创建探针或额外副作用。适配器不把普通文本静默合成为成功回答。模型请求、前缀匹配或思考字段错误从 `AgentError` 包装中还原为 Harness 错误，不计入注入故障样本。
 - smolagents M3 预注册任务为 `tasks/smolagents_m3.yaml` 与 `tasks/smolagents_m3_observation_error.yaml`，套件 `smolagents-m3` 版本 1 只覆盖 `tool_result / error_response / return_value` 和 `observation / error_response / not_applicable`。伪模型测试仅验证协议与四件套。2026-11-26 已用 DeepSeek Flash 思考模式完成两个场景各 1 次真实端点验收（套件 `20261126T134221-80425144`），故障均到达模型观察，双层报告复算一致；这些单次结果只作定性案例，不形成稳定比例或其他模型的行为结论。
 - 运行前硬校验宿主精确版本、`execute_tool_call`、`process_tool_calls`、`write_memory_to_messages` 和 `Tool.__call__` 签名。`process_tool_calls` 与结构化记忆依赖上游内部行为，升级时必须重新验证。
 - `run.json` 记录宿主精确包版本；PyPI 包无法提供源码 commit 时 `host_commit = null` 并记录原因。
@@ -347,6 +351,7 @@ console 阶段提供 FastAPI + React + TypeScript + Vite + Ant Design 的本地�
 - `reasoning_mode` 在套件启动前随实际模型选择冻结进任务副本和 `run.json`。`default` 使用提供方默认行为；`enabled` 显式启用思考；`disabled` 是显式非思考实验条件。界面和报告必须标注，禁止请求失败后静默切换模式。
 - 模型选项可通过 `FAULTLATTICE_LLM_<ID>_SAMPLING_PARAMS` 登记 JSON object 采样覆盖；选择模型时与任务预注册参数合并并显式冻结，覆盖值同时进入批次状态、界面和报告。建议请求默认 `temperature=0.2`，先应用同一通用覆盖，再应用 `FAULTLATTICE_LLM_<ID>_ADVISOR_SAMPLING_PARAMS` 建议专用覆盖；后者不得进入 M3。请求失败后不得自动改温、重试或更换模型。
 - M0 源轨迹只提供目标调用和故障契约。M3 首轮由本次真实模型生成与预注册名称、参数完全一致的唯一工具调用，再执行工具和故障注入；不匹配时在工具执行前终止，不重试、不改变故障坐标。`model_output.m3_phase` 区分 `prefix` 与 `continuation`，二者都不是预设输出。
+- M3 调用前统一声明标准 JSON 格式，并禁止故障观察后的业务、读取、诊断工具及参数重试和探针写入。LangGraph 续跑请求使用 `tools=[]`，要求直接返回最终 `AIMessage`；若仍返回工具调用，则在 ToolNode 执行前记录 `blocked_tool_calls` 与 `continuation_tool_policy=final_answer_only`，抛出 `ReplayError`，不重试、不执行额外副作用。
 - DeepSeek 思考模式下，模型原始 `reasoning_content` 必须保存在 `ModelResponse`、真实宿主消息（LangGraph `AIMessage.additional_kwargs` 或 smolagents 结构化 `ChatMessage.raw`）与 `model_output` 事件中，并在携带 `tools` 的后续请求中逐轮完整回传。字段缺失时拒绝请求，不得伪造或静默关闭思考。非思考结果不得解释为思考模式的准确性或可靠性。
 - `CounterfactualRunner` 校验源 run 与目标调用契约；真实前缀和后续循环均由对应宿主（LangGraph 或 smolagents）执行。不得复用源 run 的预设消息或最终回答冒充真实模型续跑。
 - `OpenAICompatibleModel` 使用固定 `openai==3.59.0` 和显式单次请求，密钥只从环境变量读取。模型调用前终止时记录 `model_invoked=false` 与 `observation_status=not_reached`。

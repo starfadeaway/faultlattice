@@ -213,6 +213,14 @@ export function ExternalAgentsView() {
     try {
       const inspected = await api.preflightExternalAgent(agentId)
       setAgents((current) => current.map((agent) => agent.id === agentId ? inspected : agent))
+      setSelectedTasks((current) => {
+        const selected = current[agentId]
+        const stillCompatible = inspected.compatible_tasks.some((task) => task.path === selected)
+        return {
+          ...current,
+          [agentId]: stillCompatible ? selected : inspected.compatible_tasks[0]?.path || "",
+        }
+      })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "外部 Agent 预检失败")
     } finally {

@@ -27,7 +27,8 @@ class FakeProvider:
 
     def generate(self, messages, *, tools) -> ModelResponse:
         self.messages.append(messages)
-        assert {tool["function"]["name"] for tool in tools} == {"write_file", "final_answer"}
+        expected_tools = {"write_file", "final_answer"} if len(self.messages) == 1 else {"final_answer"}
+        assert {tool["function"]["name"] for tool in tools} == expected_tools
         if len(self.messages) == 1:
             return ModelResponse.model_validate({
                 "content": "",

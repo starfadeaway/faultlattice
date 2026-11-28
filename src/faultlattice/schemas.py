@@ -239,6 +239,20 @@ class TaskDefinition(BaseModel):
                 InjectionPoint.OBSERVATION,
             ):
                 raise ConfigurationError("M3 只支持 tool_result / observation 故障")
+            unambiguous_failures = {
+                FaultType.TIMEOUT,
+                FaultType.EMPTY_RESPONSE,
+                FaultType.MALFORMED_CONTENT,
+                FaultType.ERROR_RESPONSE,
+            }
+            if (
+                self.expected_state_claim == "success"
+                and self.fault.fault_type in unambiguous_failures
+            ):
+                raise ConfigurationError(
+                    f"任务 {self.task_id}: {self.fault.fault_type.value} 故障明确要求模型声明 failure，"
+                    "不得预注册 expected_state_claim=success；如研究恢复后成功，请另建具备充分成功证据的任务"
+                )
         return self
 
 

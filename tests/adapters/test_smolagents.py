@@ -304,3 +304,57 @@ def test_m3_provider_error_is_not_converted_to_injected_failure(tmp_path: Path) 
             SCRIPT, fault=fault, sandbox=tmp_path, model_provider=FailingProvider()
         )
     assert not (tmp_path / "output" / "hello.txt").exists()
+
+
+def test_m3_precall_contract_only_exposes_final_answer_and_blocks_probe(
+    tmp_path: Path,
+) -> None:
+    class ExtraToolProvider(FakeProvider):
+        def generate(self, messages, *, tools) -> ModelResponse:
+            response = super().generate(messages, tools=tools)
+            if len(self.messages) == 1:
+                return response
+            return ModelResponse.model_validate({
+                "content": "尝试诊断写入",
+                "tool_calls": [{
+                    "id": "blocked-probe",
+                    "name": "write_file",
+                    "args": {"path": "output/probe.txt", "content": "must not exist"},
+                }],
+                "reasoning_content": "续跑思考",
+            })
+
+    fault = FaultSpec.model_validate({
+        "injection_point": "tool_result",
+        "fault_type": "error_response",
+        "surface_as": "return_value",
+        "params": {"message": "actual M3 replacement"},
+    })
+    provider = ExtraToolProvider()
+    with pytest.raises(ReplayError, match="已在执行前阻断"):
+        SmolagentsHost().run_counterfactual(
+            SCRIPT, fault=fault, sandbox=tmp_path, model_provider=provider
+        )
+
+    assert {tool["function"]["name"] for tool in provider.tools[0]} == {
+        "write_file",
+        "final_answer",
+    }
+    assert {tool["function"]["name"] for tool in provider.tools[1]} == {"final_answer"}
+    prompt = "\n".join(str(message.get("content", "")) for message in provider.messages[0])
+    # 直接检查首次请求的完整提示，而非只检查续跑工具列表或异常信息。
+    assert "【M3 调用前契约｜必须逐条遵守，不得跳步】" in prompt
+    assert "【第一轮｜只建立精确目标前缀】" in prompt
+    assert "【第二轮禁止事项｜收到首轮工具结果后立即生效】" in prompt
+    assert "【状态声明格式｜以下易错点从第一轮起生效】" in prompt
+    assert "不得调用 final_answer" in prompt
+    assert "字符串末尾换行 \\n" in prompt
+    assert '"content": "hello smolagents\\n"' in prompt
+    assert "不得重试相同参数或不同参数" in prompt
+    assert "不得创建探针文件" in prompt
+    assert "正确示例" in prompt and "错误示例（均禁止）" in prompt
+    assert '```json\n{"state_claim":"failure","reason":"工具返回错误"}\n```' in prompt
+    assert "【smolagents 第二轮终答协议】" in prompt
+    assert "不得以普通文本结束" in prompt
+    assert (tmp_path / "output" / "hello.txt").is_file()
+    assert not (tmp_path / "output" / "probe.txt").exists()

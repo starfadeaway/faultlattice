@@ -128,7 +128,7 @@ def _model_rule_evidence(
 ) -> tuple[ModelEvidence, dict]:
     """解析唯一 JSON 声明，并与运行前冻结的预期声明比较。
 
-    接受标准 json 围栏和显式 faultlattice_claim 围栏，也允许可选 reason。
+    调用前统一要求仅含对象的标准 json 围栏；解析仍兼容显式标记及换行标记变体。
     自然语言正文永远不作为判据；多个声明、非法声明和 unknown 均为证据不足。
     """
     import re
@@ -155,6 +155,14 @@ def _model_rule_evidence(
         if not marked and info not in {"json", "json5"}:
             continue
         body = match.group("body").strip()
+        # 兼容真实模型已出现的 ```json\nfaultlattice_claim\n{...} 形式。
+        # 它只是显式标记换行，不应把语义明确的声明误报为缺失；提示词仍要求统一标准格式。
+        split_marker = re.fullmatch(
+            r"faultlattice_claim\s+(?P<body>\{.*)", body, flags=re.DOTALL | re.IGNORECASE
+        )
+        if split_marker is not None and info in {"json", "json5"}:
+            marked = True
+            body = split_marker.group("body").strip()
         try:
             payload = json.loads(body)
         except ValueError as exc:

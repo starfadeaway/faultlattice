@@ -6,6 +6,9 @@
 
 | 日期 | 报告 | 被测宿主及版本 | 一句话结论 | 链接 |
 |---|---|---|---|---|
+| 2026-11-28 | 首轮易错点契约 M3 三模型重跑验收 | LangGraph 1.2.24 / smolagents / 三模型 | 新冻结 18 个坐标全部完成并公开复算，全部使用标准 JSON 且只有一次目标写入；结论限于强提示协议合规，不证明独立故障判断。 | [首轮契约重跑](external/2026-11-28-m3-precall-contract-rerun.md) |
+| 2026-11-28 | 第三轮模型审查事实核对与处理顺序 | FaultLattice 当前工作区 | 核实提示词预期泄露、任务文本与 unknown 语义、上传白名单、AST、预检选择及 63 份私有旧报告；区分当前问题与过时状态。 | [第三轮审查清单](external/2026-11-28-third-round-review-triage.md) |
+| 2026-11-28 | 新结构化声明契约 M3 真实模型补跑验收 | LangGraph 1.2.24 / smolagents / 三模型 | 18 个冻结坐标中 14 个完成并公开复算，11 个显式失败、3 个证据不足、4 个 Harness 错误；额外写入与声明格式变体单独留痕，不作模型排名。 | [补跑验收](external/2026-11-28-m3-new-contract-rerun.md) |
 | 2026-11-28 | 第二轮模型互评的事实核验与修复答复 | FaultLattice 当前工作区 | 修复报告叙述、模型预期反判、安装形态 CLI、历史 replay、登记状态与草案误伤；评审中的真实外部结果与本轮独立测试分开记录。 | [第二轮答复](external/2026-11-28-peer-review-round2-response.md) |
 | 2026-11-28 | 两份模型互评的事实核验与修复答复 | FaultLattice 当前工作区 | 核心 Oracle、M3 声明协议、独立 CI、报告完整性、小样本与安全边界已修；历史结论不回改，受影响实验须按新契约重跑。 | [修复答复](external/2026-11-28-peer-review-response.md) |
 | 2026-11-27 | Anchorline 真实 Embedding 与 LanceDB 索引验收 | Anchorline 0.1.0 / BAAI-bge-m3 / LanceDB | 修复适配器配置与索引目录映射后，生产写入生成 1 条 1024 维有效向量，现场查询首位命中同一事实；仅为小样本功能验收。 | [验收报告](external/2026-11-27-anchorline-vector-index-acceptance.md) |

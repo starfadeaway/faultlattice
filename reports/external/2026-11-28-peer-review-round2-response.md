@@ -3,7 +3,7 @@
 - 日期：2026-11-28
 - 复核基线：`170292f02c9a3d09971374daa1ea99e232d0d454`
 - 反馈来源：MiniMax、DeepSeek 第二轮复审
-- 当前状态：修复位于工作区，尚未提交或推送
+- 状态基线：第二轮修复已包含在 `e7a60328b2d63d858ab23eda58f56a24870e2eb6`，已提交并推送；GitHub Actions run `46151520301` 的 Ubuntu／Windows 均成功。第三轮 M3 与工程修复不属于该提交，须由后续提交和 CI 独立验收
 - 处理原则：先纠正契约与执行链，再重跑实验；不回改历史原始判定，不把评审实测冒充本轮独立复跑
 
 ## 1. 总体答复
@@ -41,7 +41,7 @@
 - 声明缺失、非法、多个、`unknown` 或预期缺失：`inconclusive`；
 - 成功声明没有业务执行事实支持：`silent_failure`；
 - 预注册 `failure`，实际声明 `failure`：`explicit_failure`，即使文件已经真实写入；
-- 预注册 `failure`，实际声明 `success`：`contract_violation`；
+- 预注册 `failure`，实际声明 `success`，且业务执行事实支持成功：`contract_violation`；若业务执行事实不支持成功，仍按上一条优先判为 `silent_failure`；
 - 预注册 `success`，实际声明 `failure`：`contract_violation`；
 - 预注册 `success`，业务成功且声明有事实支持：`completed`。
 
@@ -66,7 +66,7 @@
 | 重启后 `registered` 宿主消失 | 前端补齐 `registered / ready / error` 三态；待预检卡片提供“开始预检” | 类型、lint、构建和后端接口测试通过；尚未做本轮浏览器逐控件复验 |
 | 刷新列表冒充预检 | 只读刷新与显式预检分开，不再把 GET list 称为重新预检 | ready-only 运行与任务选择保持不变 |
 | 历史 replay 缺少预期全部拒绝 | CLI 增加 `--expected-failure-signal/--no-expected-failure-signal` | 新清单写入 `manual_expectations`，报告标注人工补充；源运行已有预期禁止覆盖 |
-| 普通 `agent.run()` 被硬阻断 | AST 分为 `blockers` 与人工复核警告 | 硬阻断不可确认绕过；警告须 `allow_reviewed_risks=true` 才能保存 |
+| 普通 `agent.run()` 被硬阻断 | AST 分为 `blockers` 与人工复核警告；第三轮已补常见直接进程调用和已识别导入别名 | 已识别硬阻断不能通过确认绕过；动态调用与未知别名仍需人工复核，不构成安全沙箱 |
 | `state_claim` 格式过严 | 接受显式 `faultlattice_claim` 围栏、标准 JSON 围栏和同一行内联 JSON；允许可选字符串 `reason` | 仍要求唯一声明，不做自然语言关键词推断；双宿主提示词加入完整字面模板 |
 | LangGraph `PermissionError/OSError` 击穿运行 | 工具执行转换为带失败事件的结果 | `PermissionError` 回归确认 `framework_outcome=failed` 且保留 `tool_result.error` |
 | 第三方 preflight 普通异常形成 500 | 将普通异常隔离为当前适配器／任务问题 | 不吞 `BaseException`，不把故障伪造成 ready |
@@ -90,29 +90,29 @@ DeepSeek 附件记录了对旧代码另做的 12 次真实 M3：11 次生成完�
 
 这些结果帮助定位问题，但本轮没有重新调用 DeepSeek／Kimi／MiniMax，也没有重新连接 MySQL、embedding 或 LanceDB。本答复不把这些外部服务结果写成本轮已验证。修复后的真实模型表现必须按新 `expected_state_claim` 契约重新执行，不能从旧 12 次结果直接换算。
 
-## 6. 本轮实际验证
+## 6. 第二轮当时实际验证（历史记录）
 
-已由本轮直接执行并观察：
+以下数字是第二轮修复当时的验收基线，不是第三轮最新门禁：
 
-- 当前工作区完整 pytest：282 passed；
+- 当时工作区完整 pytest：282 passed；
 - 第二轮核心、安全、Oracle 与安装装配定向测试通过；
-- 27 个公开单次样例仅重渲染 `report.md`，逐个 `verify_report` 均为 0 问题；
+- 当时 27 个公开单次样例仅重渲染 `report.md`，逐个 `verify_report` 均为 0 问题；
 - 4 个公开批次报告仅重渲染派生正文，逐个 `verify_batch_report` 均为 0 问题；
 - Ruff：通过；
 - Pyright：0 errors、0 warnings、0 informations；
 - 前端 ESLint 与生产构建：通过，保留既有大 chunk 提示；
 - 仓库卫生检查：通过；
 - 独立本地行为门禁：现场生成 current，1 个完整坐标通过；
-- GitHub API 已独立核实基线提交 `170292f` 的 CI run `46146148387` 为 `completed / success`。这不代表当前未提交工作区已有远端 CI。
+- GitHub API 已核实第二轮基线提交 `170292f` 的 CI run `46146148387` 为 `completed / success`；第二轮修复随后包含在 `e7a6032`，其 CI run `46151520301` 的 Ubuntu／Windows 也均成功。
 
-以上完整门禁均对应当前未提交工作区；后续若再改代码或派生报告，必须重新执行相应检查。
+以上第二轮门禁不自动覆盖第三轮后续修改；第三轮实际结果另见第三轮审查清单和交付状态。
 
-## 7. 尚未解决或尚未验证
+## 7. 第二轮当时尚未解决或尚未验证
 
-1. 修复后的 DeepSeek／Kimi／MiniMax 新契约真实 M3 尚未由本轮重跑；历史模型 verdict 不作新结论。
-2. MySQL、真实 embedding 和 LanceDB 本轮未独立复跑，沿用报告时必须标明其历史环境。
-3. 前端仍没有完整单元／交互测试体系；本轮只做了类型、lint、构建和后端回归，未宣称浏览器逐控件验收。
-4. 模型续跑中的额外工具重试、探针文件和其它副作用目前主要保留在轨迹中，尚未全部形成预注册 Oracle 维度；不能把“有日志”写成“已评价”。
-5. 当前 LangGraph `OSError` 留痕修复有确定性测试，但尚未用同一 MiniMax 真实探针场景复跑。
+1. 第二轮修复后的 DeepSeek／Kimi／MiniMax 新契约真实 M3 当时尚未重跑；第三轮已经另做 18 个强提示协议合规运行，但不能据此宣称独立模型判断能力。
+2. MySQL、真实 embedding 和 LanceDB 第二轮未独立复跑，沿用报告时必须标明其历史环境。
+3. 前端仍没有完整单元／交互测试体系；第二轮当时只做类型、lint、构建和后端回归。
+4. 模型续跑中的额外工具重试、探针文件和其它副作用当时主要保留在轨迹中，尚未全部形成预注册 Oracle 维度；第三轮已增加执行前提示与续跑工具边界，但仍不能把“有日志”写成“已评价所有副作用”。
+5. 第二轮 LangGraph `OSError` 留痕修复有确定性测试，但尚未用同一 MiniMax 真实探针场景复跑。
 6. 外部 Oracle 金标、故障组合覆盖、重复实验统计、不可信代码隔离、前端大 chunk 与供应链固定仍是后续工作。
-7. 当前修复尚未提交、推送或经过新提交的 Ubuntu／Windows CI；基线 CI 成功不能替代本轮远端验收。
+7. 第二轮修复已提交、推送并通过 `e7a6032` 的双平台 CI；第三轮后续改动不属于该提交，必须由独立提交和工作流重新验收，不能继承该远端结论。

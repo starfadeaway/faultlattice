@@ -186,3 +186,51 @@ def test_m3_unchanged_observation_is_not_reached(tmp_path: Path) -> None:
     assert result.observation_status == "not_reached"
     injection = next(event for event in result.events if event["kind"] == "injection")
     assert injection["applied"] is False
+
+
+def test_m3_precall_contract_removes_tools_and_blocks_extra_write(tmp_path: Path) -> None:
+    class ExtraToolProvider(FakeProvider):
+        def generate(self, messages, *, tools) -> ModelResponse:
+            super().generate(messages, tools=tools)
+            if len(self.calls) == 1:
+                target = PREFIX[0]["tool_call"]
+                return ModelResponse(
+                    content="",
+                    tool_calls=[ModelToolCall(id="real-prefix-1", **target)],
+                    reasoning_content="真实前缀思考",
+                )
+            return ModelResponse(
+                content="尝试诊断写入",
+                tool_calls=[
+                    ModelToolCall(
+                        id="blocked-probe",
+                        name="write_file",
+                        args={"path": "output/probe.txt", "content": "must not exist"},
+                    )
+                ],
+                reasoning_content="续跑思考",
+            )
+
+    provider = ExtraToolProvider()
+    with pytest.raises(ReplayError, match="已在执行前阻断"):
+        LanggraphHost().run_counterfactual(
+            PREFIX, fault=_fault(), sandbox=tmp_path, model_provider=provider
+        )
+
+    assert provider.calls[1]["tools"] == []
+    system = provider.calls[0]["messages"][0]["content"]
+    # 所有易错点必须在第一次真实请求前出现，而不是续跑出错后才补充。
+    assert "【M3 调用前契约｜必须逐条遵守，不得跳步】" in system
+    assert "【第一轮｜只建立精确目标前缀】" in system
+    assert "【第二轮禁止事项｜收到首轮工具结果后立即生效】" in system
+    assert "【状态声明格式｜以下易错点从第一轮起生效】" in system
+    assert "不得调用 final_answer" in system
+    assert "字符串末尾换行 \\n" in system
+    assert '"content": "hello m3\\n"' in system
+    assert "不得重试相同参数或不同参数" in system
+    assert "不得创建探针文件" in system
+    assert "正确示例" in system and "错误示例（均禁止）" in system
+    assert '```json\n{"state_claim":"failure","reason":"工具返回错误"}\n```' in system
+    assert "【LangGraph 第二轮终答协议】" in system
+    assert (tmp_path / "output" / "hello.txt").is_file()
+    assert not (tmp_path / "output" / "probe.txt").exists()

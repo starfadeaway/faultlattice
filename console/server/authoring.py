@@ -203,24 +203,46 @@ def inspect_adapter_source(content: str, expected_class: str | None = None) -> d
     for required in ("run_script", "preflight"):
         if required not in methods:
             warnings.append(f"当前类未直接实现 {required}；若依赖继承，登记预检仍会核对真实协议")
-    hard_dangerous = {
-        "eval", "exec", "compile", "__import__", "system", "popen", "Popen", "rmtree",
+    builtin_blockers = {"eval", "exec", "compile", "__import__"}
+    qualified_blockers = {
+        *(f"subprocess.{name}" for name in ("run", "call", "check_call", "check_output", "Popen")),
+        *(f"os.{name}" for name in (
+            "system", "popen", "spawnl", "spawnlp", "spawnlpe", "spawnv", "spawnvp",
+            "spawnvpe", "posix_spawn", "posix_spawnp",
+        )),
+        "shutil.rmtree",
     }
+    dangerous_modules = {"subprocess", "os", "shutil"}
+    module_aliases = {name: name for name in dangerous_modules}
+    function_aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in dangerous_modules:
+                    module_aliases[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module in dangerous_modules:
+            for alias in node.names:
+                qualified = f"{node.module}.{alias.name}"
+                if qualified in qualified_blockers:
+                    function_aliases[alias.asname or alias.name] = qualified
+
     review_dangerous = {"run", "import_module", "getattr", "remove", "unlink"}
     blockers: set[str] = set()
     hits: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, (ast.Name, ast.Attribute)):
             continue
-        name = node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id
-        if (
-            isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "subprocess"
-            and name == "run"
-        ):
-            name = "subprocess.run"
-        if name in hard_dangerous | {"subprocess.run"}:
+        if isinstance(node.func, ast.Name):
+            name = function_aliases.get(node.func.id, node.func.id)
+            is_builtin = node.func.id in builtin_blockers
+        else:
+            name = node.func.attr
+            is_builtin = False
+            if isinstance(node.func.value, ast.Name):
+                module = module_aliases.get(node.func.value.id)
+                if module:
+                    name = f"{module}.{node.func.attr}"
+        if name in qualified_blockers or is_builtin:
             blockers.add(name)
             hits.add(name)
         elif name in review_dangerous:
